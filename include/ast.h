@@ -7,15 +7,21 @@
 #include <stddef.h>
 
 typedef enum {
+  AST_ERROR,
+  AST_PROGRAM,
   AST_LITERAL,
   AST_IDENTIFIER,
   AST_BLOCK,
   AST_FUNCTION,
+  AST_UNARY,
+  AST_BINARY,
+  AST_RETURN,
+  AST_VARIABLE,
 } Ast_Tag;
 
 typedef struct {
-  Binding identifier;
-  Binding type;
+  const char *identifier;
+  const char *type;
 } Parameter;
 
 DEFINE_LIST(Parameter);
@@ -25,19 +31,40 @@ typedef struct Ast {
   Ast_Tag tag;
   size_t index;
   union {
+    Ast_Ptr_list program;
+    Ast_Ptr_list block;
+    struct Ast *return_value;
     struct {
-      Token literal;
+      const char *name;
+      struct Ast *initializer;
+    } variable;
+    struct {
+      struct Ast *left, *right;
+      Token_Type op;
+    } binary;
+
+    struct {
+      struct Ast *operand;
+      Token_Type op;
+    } unary;
+
+    const char *identifier;
+    struct {
+      const char *value;
       enum {
         STRING,
         INTEGER,
-      } literal_tag;
-    };
-    Binding identifier;
+      } tag;
+    } literal;
     struct {
       struct Ast *block;
       Parameter_list parameters;
-      Binding return_type;
-    };
+      const char *return_type;
+    } function;
+    struct {
+      const char *message;
+      bool fatal;
+    } error;
   };
 
 } Ast;

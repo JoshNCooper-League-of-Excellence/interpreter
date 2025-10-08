@@ -1,6 +1,8 @@
 #ifndef LEXER_H
 #define LEXER_H
 
+#define _GNU_SOURCE
+
 #include "list.h"
 #include <ctype.h>
 #include <stddef.h>
@@ -9,6 +11,8 @@
 #include <string.h>
 
 typedef enum {
+  TOKEN_EOF = -1,
+  
   TOKEN_IDENTIFIER,
   TOKEN_INTEGER,
   TOKEN_STRING,
@@ -27,7 +31,6 @@ typedef enum {
   TOKEN_COMMA,
 
   TOKEN_RETURN,
-  TOKEN_EOF = -1,
 
   TOKEN_PLUS,
   TOKEN_MINUS,
@@ -38,7 +41,7 @@ typedef enum {
 } Token_Type;
 
 typedef struct {
-  size_t line, col, length;
+  size_t line, col, length, start;
 } Span;
 
 typedef struct {
@@ -78,14 +81,15 @@ static inline void lexer_init(Lexer *lexer, const char *filename) {
   lexer->pos = 0;
   lexer->col = 1;
   lexer->line = 1;
+  lexer->lookahead = (Token_list){0};
 }
 
 static inline Token lexer_gettok(Lexer *lexer) {
+  size_t start = lexer->pos;
   while (lexer->pos < lexer->length) {
     char c = lexer->input[lexer->pos];
-
+    start = lexer->pos;
     if (isalpha(c)) {
-      size_t start = lexer->pos;
       size_t begin_line = lexer->line;
       size_t begin_col = lexer->col;
       while (lexer->pos < lexer->length && (isalnum(lexer->input[lexer->pos]) ||
@@ -96,16 +100,16 @@ static inline Token lexer_gettok(Lexer *lexer) {
       size_t len = lexer->pos - start;
       if (strncmp(lexer->input + start, "var", 3) == 0 && len == 3) {
         return (Token){nullptr, false, TOKEN_VAR,
-                       .span = {begin_line, begin_col, len}};
+                       .span = {begin_line, begin_col, len, start}};
       } else if (strncmp(lexer->input + start, "return", 6) == 0 && len == 6) {
         return (Token){nullptr, false, TOKEN_RETURN,
-                       .span = {begin_line, begin_col, len}};
+                       .span = {begin_line, begin_col, len, start}};
       }
       char *ident = malloc(len + 1);
       strncpy(ident, lexer->input + start, len);
       ident[len] = '\0';
       return (Token){ident, true, TOKEN_IDENTIFIER,
-                     .span = {begin_line, begin_col, len}};
+                     .span = {begin_line, begin_col, len, start}};
     } else if (isdigit(c)) {
       size_t start = lexer->pos;
       size_t begin_line = lexer->line;
@@ -119,7 +123,7 @@ static inline Token lexer_gettok(Lexer *lexer) {
       strncpy(num, lexer->input + start, len);
       num[len] = '\0';
       return (Token){num, true, TOKEN_INTEGER,
-                     .span = {begin_line, begin_col, len}};
+                     .span = {begin_line, begin_col, len, start}};
     } else if (ispunct(c)) {
       size_t begin_line = lexer->line;
       size_t begin_col = lexer->col;
@@ -128,40 +132,40 @@ static inline Token lexer_gettok(Lexer *lexer) {
       switch (c) {
       case '+':
         return (Token){nullptr, false, TOKEN_PLUS,
-                       .span = {begin_line, begin_col, 1}};
+                       .span = {begin_line, begin_col, 1, start}};
       case '-':
         return (Token){nullptr, false, TOKEN_MINUS,
-                       .span = {begin_line, begin_col, 1}};
+                       .span = {begin_line, begin_col, 1, start}};
       case '/':
         return (Token){nullptr, false, TOKEN_SLASH,
-                       .span = {begin_line, begin_col, 1}};
+                       .span = {begin_line, begin_col, 1, start}};
       case '*':
         return (Token){nullptr, false, TOKEN_STAR,
-                       .span = {begin_line, begin_col, 1}};
+                       .span = {begin_line, begin_col, 1, start}};
       case '=':
         return (Token){nullptr, false, TOKEN_ASSIGN,
-                       .span = {begin_line, begin_col, 1}};
+                       .span = {begin_line, begin_col, 1, start}};
       case ':':
         return (Token){nullptr, false, TOKEN_COLON,
-                       .span = {begin_line, begin_col, 1}};
+                       .span = {begin_line, begin_col, 1, start}};
       case ';':
         return (Token){nullptr, false, TOKEN_SEMI,
-                       .span = {begin_line, begin_col, 1}};
+                       .span = {begin_line, begin_col, 1, start}};
       case ',':
         return (Token){nullptr, false, TOKEN_COMMA,
-                       .span = {begin_line, begin_col, 1}};
+                       .span = {begin_line, begin_col, 1, start}};
       case '(':
         return (Token){nullptr, false, TOKEN_LPAREN,
-                       .span = {begin_line, begin_col, 1}};
+                       .span = {begin_line, begin_col, 1, start}};
       case ')':
         return (Token){nullptr, false, TOKEN_RPAREN,
-                       .span = {begin_line, begin_col, 1}};
+                       .span = {begin_line, begin_col, 1, start}};
       case '{':
         return (Token){nullptr, false, TOKEN_LCURLY,
-                       .span = {begin_line, begin_col, 1}};
+                       .span = {begin_line, begin_col, 1, start}};
       case '}':
         return (Token){nullptr, false, TOKEN_RCURLY,
-                       .span = {begin_line, begin_col, 1}};
+                       .span = {begin_line, begin_col, 1, start}};
       default:
         break;
       }
@@ -196,7 +200,7 @@ static inline Token lexer_gettok(Lexer *lexer) {
       lexer->pos++; // skip closing quote
       lexer->col++;
       return (Token){str, true, TOKEN_STRING,
-                     .span = {begin_line, begin_col, len}};
+                     .span = {begin_line, begin_col, len, start}};
     } else {
       fprintf(stderr, "unexpected character in input ('%c') at %s:%zu:%zu", c,
               lexer->filename, lexer->line, lexer->col);
@@ -206,7 +210,7 @@ static inline Token lexer_gettok(Lexer *lexer) {
     }
   }
   return (Token){.type = TOKEN_EOF,
-                 .span = {.line = lexer->line, .col = lexer->col}};
+                 .span = {lexer->line, lexer->col, 0, start}};
 }
 
 #define LEXER_BUFFER_SIZE 8
@@ -215,8 +219,6 @@ static inline void lexer_fill_buffer(Lexer *lexer) {
   while (lexer->lookahead.length < LEXER_BUFFER_SIZE) {
     Token tok = lexer_gettok(lexer);
     LIST_PUSH(lexer->lookahead, tok);
-    if (tok.type == TOKEN_EOF)
-      break;
   }
 }
 
@@ -232,16 +234,33 @@ static inline Token lexer_eat(Lexer *lexer) {
   return tok;
 }
 
-static inline Token lexer_expect(Lexer *lexer, Token_Type expected) {
+static inline Token lexer_expect(Lexer *lexer, Token_Type expected,
+                                 char **error) {
   lexer_fill_buffer(lexer);
   Token tok = lexer->lookahead.data[0];
   if (tok.type != expected) {
-    fprintf(stderr, "unexpected token at %s:%zu:%zu, expected %d, got %d\n",
-            lexer->filename, tok.span.line, tok.span.col, expected, tok.type);
-    exit(1);
+    asprintf(error, "unexpected token at %s:%zu:%zu, expected %d, got %d\n",
+             lexer->filename, tok.span.line, tok.span.col, expected, tok.type);
+    return (Token){.type = TOKEN_EOF, .span = tok.span};
   }
   LIST_REMOVE(lexer->lookahead, 0);
   return tok;
 }
+
+static inline bool lexer_next_is(Lexer *lexer, Token_Type expected) {
+  return lexer_peek(lexer).type == expected;
+}
+
+static inline bool lexer_next_is_and_not_eof(Lexer *lexer,
+                                             Token_Type expected) {
+  Token tok = lexer_peek(lexer);
+  return tok.type == expected && tok.type != TOKEN_EOF;
+}
+
+static inline Token_Type lexer_next(Lexer *lexer) {
+  return lexer_peek(lexer).type;
+}
+
+static inline Span lexer_span(Lexer *lexer) { return lexer_peek(lexer).span; }
 
 #endif

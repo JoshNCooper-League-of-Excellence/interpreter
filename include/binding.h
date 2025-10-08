@@ -1,6 +1,7 @@
 #ifndef BINDING_H
 #define BINDING_H
 
+#include "lexer.h"
 #include "list.h"
 #include "type.h"
 #include <stddef.h>
@@ -27,7 +28,8 @@ typedef struct {
   Ast_Ptr_list asts;
 } Context;
 
-struct Ast *ast_alloc(Context *context, int tag);
+Ast_Ptr ast_alloc(Context *context, int tag, Span span);
+
 inline static Type *type_alloc(Context *context) {
   Type *type = malloc(sizeof(Type));
   type->index = context->type_table.length;
