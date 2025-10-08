@@ -1,17 +1,21 @@
 #include "ast.h"
 #include "binding.h"
+#include "lexer.h"
 #include "parser.h"
+#include "thir.h"
 #include "type.h"
 #include <stddef.h>
+
+const char *CURRENTLY_COMPILING_FILE_NAME = "<no filename>";
 
 int main(int argc, char *argv[]) {
   Context context;
 
   context.string_type = type_alloc(&context);
-  *context.string_type = (Type){.name = "string"};
+  context.string_type->name = "string";
 
   context.integer_type = type_alloc(&context);
-  *context.string_type = (Type){.name = "int"};
+  context.integer_type->name = "int";
 
 #if 0
   if (argc == 1) {
@@ -21,20 +25,23 @@ int main(int argc, char *argv[]) {
   const char *filename = argv[1];
 #else
   const char *filename = "input.bi";
-#endif
+  #endif
+  CURRENTLY_COMPILING_FILE_NAME = filename;
 
-  Ast *root = parse_file(filename, &context);
+  Ast *ast_program = parse_file(filename, &context);
 
-  if (!root) {
+  if (!ast_program) {
     fprintf(stderr, "no ast returned from parser\n");
     return 1;
   }
 
-  if (root->tag == AST_ERROR) {
-    fprintf(stderr, "%s at %s:%zu:%zu\n", root->error.message, filename,
-            root->span.line, root->span.col);
+  if (ast_program->tag == AST_ERROR) {
+    fprintf(stderr, "%s at %s:%zu:%zu\n", ast_program->error.message, filename,
+            ast_program->span.line, ast_program->span.col);
     return 1;
   }
+
+  Thir *typed_program = type_program(ast_program, &context);
 
   return 0;
 }

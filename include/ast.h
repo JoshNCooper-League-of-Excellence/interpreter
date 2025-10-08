@@ -27,6 +27,7 @@ typedef struct {
 DEFINE_LIST(Parameter);
 
 typedef struct Ast {
+  Binding *binding;
   Span span;
   Ast_Tag tag;
   size_t index;
@@ -60,6 +61,7 @@ typedef struct Ast {
       struct Ast *block;
       Parameter_list parameters;
       const char *return_type;
+      const char *name;
     } function;
     struct {
       const char *message;

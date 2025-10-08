@@ -12,7 +12,7 @@
 
 typedef enum {
   TOKEN_EOF = -1,
-  
+
   TOKEN_IDENTIFIER,
   TOKEN_INTEGER,
   TOKEN_STRING,
@@ -40,9 +40,42 @@ typedef enum {
 
 } Token_Type;
 
+static inline const char *token_type_to_string(Token_Type type) {
+  switch (type) {
+  case TOKEN_EOF: return "EOF";
+  case TOKEN_IDENTIFIER: return "IDENTIFIER";
+  case TOKEN_INTEGER: return "INTEGER";
+  case TOKEN_STRING: return "STRING";
+  case TOKEN_VAR: return "VAR";
+  case TOKEN_COLON: return "COLON";
+  case TOKEN_LPAREN: return "LPAREN";
+  case TOKEN_RPAREN: return "RPAREN";
+  case TOKEN_LCURLY: return "LCURLY";
+  case TOKEN_RCURLY: return "RCURLY";
+  case TOKEN_SEMI: return "SEMI";
+  case TOKEN_COMMA: return "COMMA";
+  case TOKEN_RETURN: return "RETURN";
+  case TOKEN_PLUS: return "PLUS";
+  case TOKEN_MINUS: return "MINUS";
+  case TOKEN_SLASH: return "SLASH";
+  case TOKEN_STAR: return "STAR";
+  case TOKEN_ASSIGN: return "ASSIGN";
+  default: return "UNKNOWN";
+  }
+}
+
 typedef struct {
   size_t line, col, length, start;
 } Span;
+
+extern const char *CURRENTLY_COMPILING_FILE_NAME;
+
+static inline char *lexer_span_to_string(const Span *span) {
+  char *buffer = malloc(64);
+  snprintf(buffer, 64, "%s:%zu:%zu", CURRENTLY_COMPILING_FILE_NAME, span->line,
+           span->col);
+  return buffer;
+}
 
 typedef struct {
   const char *value;

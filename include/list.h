@@ -96,12 +96,10 @@
     (list).length = 0;                                                         \
   } while (0)
 
-#define LIST_FOREACH(list, var)                                                \
-  for (unsigned int __i = 0; __i < (list).length; ++__i)                       \
-    auto var = (list).data[i];
-
-#define UNROLLED_LIST(type, name)                                              \
-  type *name;                                                                  \
-  unsigned int name##_count;
+#define LIST_FOREACH(list, var)                                                 \
+  for (unsigned int __i = 0; __i < (list).length; ++__i)                        \
+    for (int __once = 1; __once; __once = 0)                                    \
+      for (typeof((list).data[0]) var = (list).data[__i]; __once; __once = 0)
 
 #endif
+

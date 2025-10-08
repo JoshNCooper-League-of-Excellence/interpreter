@@ -1,6 +1,7 @@
 #include "ast.h"
 #include "binding.h"
 #include "lexer.h"
+#include <limits.h>
 
 typedef enum {
   PREC_NONE = 0,
@@ -11,7 +12,9 @@ typedef enum {
   PREC_PRIMARY,    // literals, identifiers
 } Precedence;
 
-static inline Precedence get_precedence(Token_Type type) {
+static inline Precedence get_precedence(Token_Type type,
+                                        bool *is_valid_operator) {
+  *is_valid_operator = true;
   switch (type) {
   case TOKEN_ASSIGN:
     return PREC_ASSIGNMENT;
@@ -28,7 +31,8 @@ static inline Precedence get_precedence(Token_Type type) {
   case TOKEN_STRING:
     return PREC_PRIMARY;
   default:
-    return PREC_NONE;
+    *is_valid_operator = false;
+    return -1;
   }
 }
 

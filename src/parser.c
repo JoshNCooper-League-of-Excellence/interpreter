@@ -2,17 +2,18 @@
 #include "ast.h"
 #include "binding.h"
 #include "lexer.h"
+#include "list.h"
 #include <limits.h>
 
-#define EXPECT($tok)                                                           \
+#define EXPECT($expected)                                                      \
   ({                                                                           \
     Token tok = lexer_peek(lexer);                                             \
-    if (tok.type != $tok) {                                                    \
+    if (tok.type != $expected) {                                               \
       char *error_msg;                                                         \
-      asprintf(&error_msg,                                                     \
-               "unexpected token at %s:%zu:%zu, expected %d, got %d\n",        \
-               lexer->filename, tok.span.line, tok.span.col, $tok, tok.type);  \
-      __asm("int3");                                                           \
+      asprintf(                                                                \
+          &error_msg, "unexpected token at %s:%zu:%zu, expected %s, got %s\n", \
+          lexer->filename, tok.span.line, tok.span.col,                        \
+          token_type_to_string($expected), token_type_to_string(tok.type));    \
       return parser_error(context, lexer_span(lexer), error_msg, true);        \
     }                                                                          \
     lexer_eat(lexer);                                                          \
@@ -35,6 +36,8 @@
 
 Ast *parser_error(Context *context, Span span, const char *message,
                   bool fatal) {
+  fprintf(stderr, "%s:%zu:%zu: %s\n", CURRENTLY_COMPILING_FILE_NAME, span.line,
+          span.col, message);
   Ast *ast = ast_alloc(context, AST_ERROR, span);
   ast->error.message = message;
   ast->error.fatal = fatal;
@@ -48,27 +51,34 @@ Ast *parse_file(const char *filename, Context *context) {
 }
 
 Ast *parse_program(Lexer *lexer, Context *context) {
-  ast_alloc(context, AST_PROGRAM, lexer_span(lexer));
-  while (!lexer_next_is(lexer, TOKEN_EOF)) {
-    switch (lexer_next(lexer)) {
-    case TOKEN_IDENTIFIER: {
-      return parse_function(lexer, context);
+  Ast_Ptr_list statements = {0};
+  while (true) {
+    Token_Type peeked = lexer_next(lexer);
+    if (peeked == TOKEN_EOF) {
+      break;
     }
 
+    switch (lexer_next(lexer)) {
+    case TOKEN_IDENTIFIER: {
+      LIST_PUSH(statements, OK(parse_function(lexer, context)));
+      break;
+    }
     default:
-      return parser_error(context, lexer_span(lexer),
-                          "Unexpected token at top level.", true);
+      char *buf;
+      asprintf(&buf, "Unexpected token %s at top level.",
+               token_type_to_string(peeked));
+      return parser_error(context, lexer_span(lexer), buf, true);
       break;
     }
   }
-
-  return parser_error(context, lexer_span(lexer), "Unexpected end of input",
-                      true);
+  Ast *program = ast_alloc(context, AST_PROGRAM, lexer_span(lexer));
+  program->program = statements;
+  return program;
 }
 
 Ast *parse_block(Lexer *lexer, Context *context) {
   BEGIN_SPAN(EXPECT(TOKEN_LCURLY))
-  Ast_Ptr_list statements;
+  Ast_Ptr_list statements = {0};
 
   while (true) {
     Token peeked = lexer_peek(lexer);
@@ -87,16 +97,19 @@ Ast *parse_block(Lexer *lexer, Context *context) {
       LIST_PUSH(statements, OK(parse_variable(lexer, context)));
       break;
     case TOKEN_RETURN:
+      lexer_eat(lexer);
       if (lexer_next_is(lexer, TOKEN_SEMI)) {
         END_SPAN()
         Ast *return_expr = ast_alloc(context, AST_RETURN, span);
         return_expr->return_value = nullptr;
+        return return_expr;
       }
-      Ast *expression = parse_expression(lexer, context);
+      Ast *expression = OK(parse_expression(lexer, context));
       END_SPAN();
       Ast *return_expr = ast_alloc(context, AST_RETURN, span);
       return_expr->return_value = expression;
-      return return_expr;
+      EXPECT(TOKEN_SEMI);
+      LIST_PUSH(statements, return_expr);
       break;
     case TOKEN_EOF:
       return parser_error(context, span,
@@ -105,6 +118,7 @@ Ast *parse_block(Lexer *lexer, Context *context) {
       // easily propagate formatted error.
       // -2 doesn't exist.
       EXPECT(-2);
+      break;
     }
   }
 
@@ -119,8 +133,14 @@ Ast *parse_block(Lexer *lexer, Context *context) {
 Ast *parse_primary(Lexer *lexer, Context *context) {
   Token peeked = lexer_peek(lexer);
   BEGIN_SPAN(peeked);
-
   switch (peeked.type) {
+  case TOKEN_IDENTIFIER: {
+    lexer_eat(lexer);
+    END_SPAN()
+    Ast *ident = ast_alloc(context, AST_IDENTIFIER, span);
+    ident->identifier = peeked.value;
+    return ident;
+  }
   case TOKEN_INTEGER: {
     lexer_eat(lexer);
     END_SPAN()
@@ -138,8 +158,10 @@ Ast *parse_primary(Lexer *lexer, Context *context) {
     return integer;
   } break;
   default:
+    lexer_eat(lexer);
     char *buf;
-    asprintf(&buf, "unexpected token when parsing literal: %d", peeked.type);
+    asprintf(&buf, "unexpected token when parsing literal: %s",
+             token_type_to_string(peeked.type));
     return parser_error(context, span, buf, true);
   }
 }
@@ -150,9 +172,10 @@ Ast *parse_binary(Lexer *lexer, Context *context, Precedence precedence) {
 
   while (true) {
     Token op = lexer_peek(lexer);
-    Precedence op_prec = get_precedence(op.type);
+    bool is_valid_operator = false;
+    Precedence op_prec = get_precedence(op.type, &is_valid_operator);
 
-    if (op_prec < precedence) {
+    if (op_prec < precedence || !is_valid_operator) {
       break;
     }
 
@@ -204,11 +227,20 @@ Ast *parse_function(Lexer *lexer, Context *context) {
   END_SPAN();
 
   Ast *function = ast_alloc(context, AST_FUNCTION, span);
-  function->function = (typeof(function->function)){
-      .block = block,
-      .parameters = parameters,
-      .return_type = returns.value,
-  };
+  function->function.block = block;
+  function->function.parameters = parameters;
+  function->function.return_type = returns.value;
+  function->function.name = identifier.value;
+
+  printf("%s :: (", function->function.name);
+  LIST_FOREACH(parameters, param) {
+    printf("%s %s", param.identifier, param.type);
+    if (__i != parameters.length - 1) {
+      printf(", ");
+    }
+  }
+  printf(") %s\n", function->function.return_type);
+
   return function;
 }
 
@@ -216,7 +248,7 @@ Ast *parse_variable(Lexer *lexer, Context *context) {
   BEGIN_SPAN(EXPECT(TOKEN_VAR));
   Token identifier = EXPECT(TOKEN_IDENTIFIER);
   EXPECT(TOKEN_ASSIGN);
-  Ast *expression = parse_expression(lexer, context);
+  Ast *expression = OK(parse_expression(lexer, context));
   EXPECT(TOKEN_SEMI);
   END_SPAN();
   Ast *var = ast_alloc(context, AST_VARIABLE, span);
