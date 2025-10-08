@@ -1,6 +1,7 @@
 #include "ast.h"
 #include "binding.h"
 #include "lexer.h"
+#include "list.h"
 #include "parser.h"
 #include "thir.h"
 #include "type.h"
@@ -42,6 +43,24 @@ int main(int argc, char *argv[]) {
   }
 
   Thir *typed_program = type_program(ast_program, &context);
+
+
+  LIST_FOREACH(context.bindings, binding) {
+    printf("binding {\n");
+    if (binding->name) {
+      printf("\tname: '%s'\n", binding->name);
+    } 
+    if (binding->ast) {
+      printf("\tAst: %p\n", binding->ast);
+    }
+    if (binding->thir) {
+      printf("\tThir: %p\n", binding->thir);
+    }
+    if (binding->type) {
+      printf("\ttype: %p aka %s\n", binding->type, binding->type->name);
+    }
+    printf("}\n");
+  }
 
   return 0;
 }

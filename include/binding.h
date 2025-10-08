@@ -50,6 +50,6 @@ Ast_Ptr ast_alloc(Context *context, int tag, Span span);
 Thir_Ptr thir_alloc(Context *context, int tag, Span span);
 Type *type_alloc(Context *context);
 Function_Type *function_type_alloc(Context *context);
-Binding_Ptr binding_alloc(Context *context, Binding binding);
+Binding_Ptr register_binding(Context *context, Binding binding);
 
 #endif

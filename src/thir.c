@@ -20,7 +20,7 @@ Binding_Ptr_list typer_convert_parameters(Parameter_list parameters, Span span,
     }
 
     Binding *binding =
-        binding_alloc(context, (Binding){.thir = thir_param,
+        register_binding(context, (Binding){.thir = thir_param,
                                          .ast = nullptr,
                                          .name = param.identifier,
                                          .type = param_type});
@@ -132,6 +132,14 @@ Thir *type_function(Ast *ast, Context *context) {
   }
 
   thir_fn->return_type = return_type;
+
+  Binding binding = {0};
+  binding.ast = ast;
+  binding.thir = function;
+  binding.name = ast->function.name;
+  binding.type = /* TODO: get function type */ nullptr;
+
+  register_binding(context, binding);
 
   return function;
 }
@@ -344,7 +352,7 @@ Thir *type_variable(Ast *ast, Context *context) {
   }
 
   binding.type = initializer->type;
-  binding_alloc(context, binding);
+  register_binding(context, binding);
 
   return var;
 }

@@ -23,7 +23,7 @@ Thir *thir_alloc(Context *context, int tag, Span span) {
   return thir;
 }
 
-Binding_Ptr binding_alloc(Context *context, Binding binding) {
+Binding_Ptr register_binding(Context *context, Binding binding) {
   Binding_Ptr ptr = malloc(sizeof(Binding));
   memset(ptr, 0, sizeof(Binding));
   *ptr = binding;
