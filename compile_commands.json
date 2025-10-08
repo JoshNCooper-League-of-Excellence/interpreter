@@ -1,0 +1,16 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/clang",
+      "-std=c23",
+      "-Iinclude",
+      "-c",
+      "-o",
+      "obj/debug/main.o",
+      "src/main.c"
+    ],
+    "directory": "/home/josh/source/c/bindings",
+    "file": "/home/josh/source/c/bindings/src/main.c",
+    "output": "/home/josh/source/c/bindings/obj/debug/main.o"
+  }
+]

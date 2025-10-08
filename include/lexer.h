@@ -1,0 +1,186 @@
+#ifndef LEXER_H
+#define LEXER_H
+
+#include <ctype.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef enum {
+  TOKEN_IDENTIFIER,
+  TOKEN_INTEGER,
+  TOKEN_STRING,
+
+  TOKEN_VAR,
+
+  TOKEN_COLON,
+
+  TOKEN_LPAREN,
+  TOKEN_RPAREN,
+
+  TOKEN_LCURLY,
+  TOKEN_RCURLY,
+
+  TOKEN_SEMI,
+  TOKEN_COMMA,
+
+  TOKEN_RETURN,
+  TOKEN_EOF = -1,
+} Token_Type;
+
+typedef struct {
+  size_t line, col, length;
+} Span;
+
+typedef struct {
+  const char *value;
+  bool has_value;
+  Token_Type type;
+  Span span;
+} Token;
+
+typedef struct {
+  size_t pos, col, line, length;
+  const char *filename;
+  const char *input;
+} Lexer;
+
+static inline void lexer_init(Lexer *lexer, const char *filename) {
+  FILE *file = fopen(filename, "r");
+
+  if (!file) {
+    fprintf(stderr, "unable to open file '%s'\n", filename);
+    exit(1);
+  }
+
+  fseek(file, 0, SEEK_END);
+  int length = ftell(file);
+  fseek(file, 0, SEEK_SET);
+  char *buffer = malloc(sizeof(char) * length);
+  fread(buffer, 1, length, file);
+  fclose(file);
+
+  lexer->length = length;
+  lexer->input = buffer;
+  lexer->filename = filename;
+  lexer->pos = 0;
+  lexer->col = 1;
+  lexer->line = 1;
+}
+
+static inline Token lexer_gettok(Lexer *lexer) {
+  while (lexer->pos < lexer->length) {
+    char c = lexer->input[lexer->pos];
+
+    if (isalpha(c)) {
+      size_t start = lexer->pos;
+      size_t begin_line = lexer->line;
+      size_t begin_col = lexer->col;
+      while (lexer->pos < lexer->length && (isalnum(lexer->input[lexer->pos]) ||
+                                            lexer->input[lexer->pos] == '_')) {
+        lexer->pos++;
+        lexer->col++;
+      }
+      size_t len = lexer->pos - start;
+      if (strncmp(lexer->input + start, "var", 3) == 0 && len == 3) {
+        return (Token){nullptr, false, TOKEN_VAR,
+                       .span = {begin_line, begin_col, len}};
+      } else if (strncmp(lexer->input + start, "return", 6) == 0 && len == 6) {
+        return (Token){nullptr, false, TOKEN_RETURN,
+                       .span = {begin_line, begin_col, len}};
+      }
+      char *ident = malloc(len + 1);
+      strncpy(ident, lexer->input + start, len);
+      ident[len] = '\0';
+      return (Token){ident, true, TOKEN_IDENTIFIER,
+                     .span = {begin_line, begin_col, len}};
+    } else if (isdigit(c)) {
+      size_t start = lexer->pos;
+      size_t begin_line = lexer->line;
+      size_t begin_col = lexer->col;
+      while (lexer->pos < lexer->length && isdigit(lexer->input[lexer->pos])) {
+        lexer->pos++;
+        lexer->col++;
+      }
+      size_t len = lexer->pos - start;
+      char *num = malloc(len + 1);
+      strncpy(num, lexer->input + start, len);
+      num[len] = '\0';
+      return (Token){num, true, TOKEN_INTEGER,
+                     .span = {begin_line, begin_col, len}};
+    } else if (ispunct(c)) {
+      size_t begin_line = lexer->line;
+      size_t begin_col = lexer->col;
+      lexer->pos++;
+      lexer->col++;
+      switch (c) {
+      case ':':
+        return (Token){nullptr, false, TOKEN_COLON,
+                       .span = {begin_line, begin_col, 1}};
+      case ';':
+        return (Token){nullptr, false, TOKEN_SEMI,
+                       .span = {begin_line, begin_col, 1}};
+      case ',':
+        return (Token){nullptr, false, TOKEN_COMMA,
+                       .span = {begin_line, begin_col, 1}};
+      case '(':
+        return (Token){nullptr, false, TOKEN_LPAREN,
+                       .span = {begin_line, begin_col, 1}};
+      case ')':
+        return (Token){nullptr, false, TOKEN_RPAREN,
+                       .span = {begin_line, begin_col, 1}};
+      case '{':
+        return (Token){nullptr, false, TOKEN_LCURLY,
+                       .span = {begin_line, begin_col, 1}};
+      case '}':
+        return (Token){nullptr, false, TOKEN_RCURLY,
+                       .span = {begin_line, begin_col, 1}};
+      default:
+        break;
+      }
+    } else if (isspace(c)) {
+      if (c == '\n') {
+        lexer->line++;
+        lexer->col = 1;
+      } else {
+        lexer->col++;
+      }
+      lexer->pos++;
+      continue;
+    } else if (c == '"') {
+      size_t begin_line = lexer->line;
+      size_t begin_col = lexer->col;
+      lexer->pos++; // skip opening quote
+      lexer->col++;
+      size_t start = lexer->pos;
+      while (lexer->pos < lexer->length && lexer->input[lexer->pos] != '"') {
+        if (lexer->input[lexer->pos] == '\n') {
+          lexer->line++;
+          lexer->col = 1;
+        } else {
+          lexer->col++;
+        }
+        lexer->pos++;
+      }
+      size_t len = lexer->pos - start;
+      char *str = malloc(len + 1);
+      strncpy(str, lexer->input + start, len);
+      str[len] = '\0';
+      lexer->pos++; // skip closing quote
+      lexer->col++;
+      return (Token){str, true, TOKEN_STRING,
+                     .span = {begin_line, begin_col, len}};
+    } else {
+      fprintf(stderr, "unexpected character in input ('%c') at %s:%zu:%zu", c,
+              lexer->filename, lexer->line, lexer->col);
+      lexer->pos++;
+      lexer->col++;
+      continue;
+    }
+  }
+  return (Token){.type = TOKEN_EOF,
+                 .span = {.line = lexer->line, .col = lexer->col}};
+}
+
+#endif
