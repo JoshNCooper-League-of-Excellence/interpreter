@@ -17,6 +17,7 @@ typedef enum {
   AST_BINARY,
   AST_RETURN,
   AST_VARIABLE,
+  AST_CALL,
 } Ast_Tag;
 
 typedef struct {
@@ -57,12 +58,19 @@ typedef struct Ast {
         INTEGER,
       } tag;
     } literal;
+
     struct {
       struct Ast *block;
       Parameter_list parameters;
       const char *return_type;
       const char *name;
     } function;
+
+    struct {
+      const char *callee;
+      Ast_Ptr_list arguments;
+    } call;
+
     struct {
       const char *message;
       bool fatal;

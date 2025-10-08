@@ -130,12 +130,37 @@ Ast *parse_block(Lexer *lexer, Context *context) {
   return block;
 }
 
+Ast *parse_call(const char *callee, Lexer *lexer, Context *context) {
+  BEGIN_SPAN(EXPECT(TOKEN_LPAREN));
+  Ast_Ptr_list arguments = {0};
+  while (true) {
+    if (lexer_next(lexer) == TOKEN_RPAREN) {
+      break;
+    }
+    LIST_PUSH(arguments, OK(parse_expression(lexer, context)));
+    if (!lexer_next_is(lexer, TOKEN_RPAREN)) {
+      EXPECT(TOKEN_COMMA);
+    }
+  }
+  EXPECT(TOKEN_RPAREN);
+  END_SPAN()
+  Ast *call = ast_alloc(context, AST_CALL, span);
+  call->call.callee = callee;
+  call->call.arguments = arguments;
+  return call;
+}
+
 Ast *parse_primary(Lexer *lexer, Context *context) {
   Token peeked = lexer_peek(lexer);
   BEGIN_SPAN(peeked);
   switch (peeked.type) {
   case TOKEN_IDENTIFIER: {
     lexer_eat(lexer);
+
+    if (lexer_next_is(lexer, TOKEN_LPAREN)) {
+      return parse_call(peeked.value, lexer, context);
+    }
+
     END_SPAN()
     Ast *ident = ast_alloc(context, AST_IDENTIFIER, span);
     ident->identifier = peeked.value;

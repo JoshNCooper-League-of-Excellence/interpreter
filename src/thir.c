@@ -21,9 +21,9 @@ Binding_Ptr_list typer_convert_parameters(Parameter_list parameters, Span span,
 
     Binding *binding =
         register_binding(context, (Binding){.thir = thir_param,
-                                         .ast = nullptr,
-                                         .name = param.identifier,
-                                         .type = param_type});
+                                            .ast = nullptr,
+                                            .name = param.identifier,
+                                            .type = param_type});
 
     LIST_PUSH(bindings, binding);
   }
@@ -175,6 +175,9 @@ Thir *type_block(Ast *ast, Context *context) {
     switch (statement->tag) {
     case AST_ERROR:
       report_error(statement);
+    case AST_CALL: 
+      LIST_PUSH(statements, type_call(statement, context));
+      break;
     case AST_UNARY:
       LIST_PUSH(statements, type_unary(statement, context));
       break;
@@ -199,81 +202,43 @@ Thir *type_block(Ast *ast, Context *context) {
   return block;
 }
 
-Thir *type_unary(Ast *ast, Context *context) {
-  Thir *unary = thir_alloc(context, THIR_UNARY, ast->span);
-
-  Thir *operand = nullptr;
-  switch (ast->unary.operand->tag) {
+Thir *type_expression(Ast *ast, Context *context) {
+  switch (ast->tag) {
+  case AST_CALL:
+    return type_call(ast, context);
   case AST_LITERAL:
-    operand = type_literal(ast->unary.operand, context);
-    break;
+    return type_literal(ast, context);
   case AST_IDENTIFIER:
-    operand = type_identifier(ast->unary.operand, context);
-    break;
+    return type_identifier(ast, context);
   case AST_UNARY:
-    operand = type_unary(ast->unary.operand, context);
-    break;
+    return type_unary(ast, context);
   case AST_BINARY:
-    operand = type_binary(ast->unary.operand, context);
-    break;
+    return type_binary(ast, context);
   default:
     char *buf;
-    asprintf(&buf, "unexpected node in unary expression: %d, at: %s\n",
-             ast->unary.operand->tag, lexer_span_to_string(&ast->span));
+    asprintf(&buf, "unexpected expression node type: %d, at %s", ast->tag,
+             lexer_span_to_string(&ast->span));
     fprintf(stderr, "%s\n", buf);
     exit(1);
   }
+}
+
+Thir *type_unary(Ast *ast, Context *context) {
+  Thir *unary = thir_alloc(context, THIR_UNARY, ast->span);
+  Thir *operand = type_expression(ast->unary.operand, context);
 
   unary->unary.op = ast->unary.op;
   unary->unary.operand = operand;
   unary->type = operand->type;
-
   return unary;
 }
 
 Thir *type_binary(Ast *ast, Context *context) {
   Thir *binary = thir_alloc(context, THIR_BINARY, ast->span);
 
-  Thir *left = nullptr;
-  Thir *right = nullptr;
-
-  switch (ast->binary.left->tag) {
-  case AST_LITERAL:
-    left = type_literal(ast->binary.left, context);
-    break;
-  case AST_IDENTIFIER:
-    left = type_identifier(ast->binary.left, context);
-    break;
-  case AST_UNARY:
-    left = type_unary(ast->binary.left, context);
-    break;
-  case AST_BINARY:
-    left = type_binary(ast->binary.left, context);
-    break;
-  default:
-    fprintf(stderr, "unexpected node in binary left operand: %d, at: %s\n",
-            ast->binary.left->tag, lexer_span_to_string(&ast->span));
-    exit(1);
-  }
-
-  switch (ast->binary.right->tag) {
-  case AST_LITERAL:
-    right = type_literal(ast->binary.right, context);
-    break;
-  case AST_IDENTIFIER:
-    right = type_identifier(ast->binary.right, context);
-    break;
-  case AST_UNARY:
-    right = type_unary(ast->binary.right, context);
-    break;
-  case AST_BINARY:
-    right = type_binary(ast->binary.right, context);
-    break;
-  default:
-    fprintf(stderr, "unexpected node in binary right operand: %d, at: %s\n",
-            ast->binary.right->tag, lexer_span_to_string(&ast->span));
-    exit(1);
-  }
+  Thir *left = type_expression(ast->binary.left, context);
+  Thir *right = type_expression(ast->binary.right, context);
+  ;
 
   binary->binary.op = ast->binary.op;
   binary->binary.left = left;
@@ -286,29 +251,22 @@ Thir *type_binary(Ast *ast, Context *context) {
 Thir *type_return(Ast *ast, Context *context) {
   Thir *ret = thir_alloc(context, THIR_RETURN, ast->span);
   if (ast->return_value) {
-    switch (ast->return_value->tag) {
-    case AST_LITERAL:
-      ret->return_value = type_literal(ast->return_value, context);
-      break;
-    case AST_IDENTIFIER:
-      ret->return_value = type_identifier(ast->return_value, context);
-      break;
-    case AST_UNARY:
-      ret->return_value = type_unary(ast->return_value, context);
-      break;
-    case AST_BINARY:
-      ret->return_value = type_binary(ast->return_value, context);
-      break;
-    default:
-      char *buf;
-      asprintf(&buf, "unexpected return value expression node type: %d, at %s",
-               ast->return_value->tag,
-               lexer_span_to_string(&ast->return_value->span));
-      fprintf(stderr, "%s\n", buf);
-      exit(1);
-    }
   }
   return ret;
+}
+
+Thir *type_call(Ast *ast, Context *context) {
+  Binding *callee = get_binding(ast->call.callee, ast->span, context);
+  Thir_Ptr_list arguments = {0};
+  LIST_FOREACH(ast->call.arguments, ast_arg) {
+    Thir *arg = type_expression(ast_arg, context);
+    LIST_PUSH(arguments, arg);
+  }
+  Thir *call = thir_alloc(context, THIR_CALL, ast->span);
+  call->call.arguments = arguments;
+  call->call.callee = callee;
+  // TODO: get the function type.
+  return call;
 }
 
 Thir *type_variable(Ast *ast, Context *context) {
@@ -321,27 +279,7 @@ Thir *type_variable(Ast *ast, Context *context) {
 
   Thir *initializer = nullptr;
   if (ast->variable.initializer) {
-    switch (ast->variable.initializer->tag) {
-    case AST_LITERAL:
-      initializer = type_literal(ast->variable.initializer, context);
-      break;
-    case AST_IDENTIFIER:
-      initializer = type_identifier(ast->variable.initializer, context);
-      break;
-    case AST_UNARY:
-      initializer = type_unary(ast->variable.initializer, context);
-      break;
-    case AST_BINARY:
-      initializer = type_binary(ast->variable.initializer, context);
-      break;
-    default:
-      char *buf;
-      asprintf(&buf, "unexpected node type in variable initializer: %d, at: %s",
-               ast->variable.initializer->tag,
-               lexer_span_to_string(&ast->variable.initializer->span));
-      fprintf(stderr, "%s\n", buf);
-      exit(1);
-    }
+    initializer = type_expression(ast->variable.initializer, context);
   } else {
     char *buf;
     asprintf(&buf, "uninitialized variables not allowed: %d, at: %s",

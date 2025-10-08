@@ -13,6 +13,7 @@ typedef enum {
   THIR_UNARY,
   THIR_BINARY,
   THIR_RETURN,
+  THIR_CALL,
 } Thir_Tag;
 
 typedef struct Thir {
@@ -30,6 +31,12 @@ typedef struct Thir {
       struct Thir *block;
       const char *name;
     } function;
+
+    struct {
+      Binding *callee;
+      Thir_Ptr_list arguments;
+      Type *type;
+    } call;
 
     struct {
       const char *value;
@@ -51,6 +58,8 @@ typedef struct Thir {
 
 Thir *type_program(struct Ast *, Context *context);
 Thir *type_literal(struct Ast *, Context *context);
+Thir *type_call(struct Ast *, Context *context);
+Thir *type_expression(struct Ast *, Context *context);
 Thir *type_identifier(struct Ast *, Context *context);
 Thir *type_block(struct Ast *, Context *context);
 Thir *type_function(struct Ast *, Context *context);
