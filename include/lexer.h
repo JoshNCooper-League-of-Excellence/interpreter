@@ -1,6 +1,7 @@
 #ifndef LEXER_H
 #define LEXER_H
 
+#include "list.h"
 #include <ctype.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -27,6 +28,13 @@ typedef enum {
 
   TOKEN_RETURN,
   TOKEN_EOF = -1,
+
+  TOKEN_PLUS,
+  TOKEN_MINUS,
+  TOKEN_SLASH,
+  TOKEN_STAR,
+  TOKEN_ASSIGN,
+
 } Token_Type;
 
 typedef struct {
@@ -40,10 +48,13 @@ typedef struct {
   Span span;
 } Token;
 
+DEFINE_LIST(Token);
+
 typedef struct {
   size_t pos, col, line, length;
   const char *filename;
   const char *input;
+  Token_list lookahead;
 } Lexer;
 
 static inline void lexer_init(Lexer *lexer, const char *filename) {
@@ -115,6 +126,21 @@ static inline Token lexer_gettok(Lexer *lexer) {
       lexer->pos++;
       lexer->col++;
       switch (c) {
+      case '+':
+        return (Token){nullptr, false, TOKEN_PLUS,
+                       .span = {begin_line, begin_col, 1}};
+      case '-':
+        return (Token){nullptr, false, TOKEN_MINUS,
+                       .span = {begin_line, begin_col, 1}};
+      case '/':
+        return (Token){nullptr, false, TOKEN_SLASH,
+                       .span = {begin_line, begin_col, 1}};
+      case '*':
+        return (Token){nullptr, false, TOKEN_STAR,
+                       .span = {begin_line, begin_col, 1}};
+      case '=':
+        return (Token){nullptr, false, TOKEN_ASSIGN,
+                       .span = {begin_line, begin_col, 1}};
       case ':':
         return (Token){nullptr, false, TOKEN_COLON,
                        .span = {begin_line, begin_col, 1}};
@@ -181,6 +207,41 @@ static inline Token lexer_gettok(Lexer *lexer) {
   }
   return (Token){.type = TOKEN_EOF,
                  .span = {.line = lexer->line, .col = lexer->col}};
+}
+
+#define LEXER_BUFFER_SIZE 8
+
+static inline void lexer_fill_buffer(Lexer *lexer) {
+  while (lexer->lookahead.length < LEXER_BUFFER_SIZE) {
+    Token tok = lexer_gettok(lexer);
+    LIST_PUSH(lexer->lookahead, tok);
+    if (tok.type == TOKEN_EOF)
+      break;
+  }
+}
+
+static inline Token lexer_peek(Lexer *lexer) {
+  lexer_fill_buffer(lexer);
+  return lexer->lookahead.data[0];
+}
+
+static inline Token lexer_eat(Lexer *lexer) {
+  lexer_fill_buffer(lexer);
+  Token tok = lexer->lookahead.data[0];
+  LIST_REMOVE(lexer->lookahead, 0);
+  return tok;
+}
+
+static inline Token lexer_expect(Lexer *lexer, Token_Type expected) {
+  lexer_fill_buffer(lexer);
+  Token tok = lexer->lookahead.data[0];
+  if (tok.type != expected) {
+    fprintf(stderr, "unexpected token at %s:%zu:%zu, expected %d, got %d\n",
+            lexer->filename, tok.span.line, tok.span.col, expected, tok.type);
+    exit(1);
+  }
+  LIST_REMOVE(lexer->lookahead, 0);
+  return tok;
 }
 
 #endif

@@ -74,6 +74,15 @@
     __ret;                                                                     \
   })
 
+#define LIST_REMOVE(list, idx)                                                 \
+  do {                                                                         \
+    if ((idx) < (list).length) {                                               \
+      memmove(&(list).data[idx], &(list).data[(idx) + 1],                      \
+              ((list).length - (idx) - 1) * sizeof *(list).data);              \
+      --(list).length;                                                         \
+    }                                                                          \
+  } while (0)
+
 #define LIST_FREE(list)                                                        \
   do {                                                                         \
     free((list).data);                                                         \

@@ -4,6 +4,7 @@
 #include "binding.h"
 #include "lexer.h"
 #include "list.h"
+#include <stddef.h>
 
 typedef enum {
   AST_LITERAL,
@@ -15,13 +16,14 @@ typedef enum {
 typedef struct {
   Binding identifier;
   Binding type;
-} Parameter; 
+} Parameter;
 
 DEFINE_LIST(Parameter);
 
 typedef struct Ast {
   Span span;
   Ast_Tag tag;
+  size_t index;
   union {
     struct {
       Token literal;
