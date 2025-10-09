@@ -3,6 +3,7 @@
 #include "lexer.h"
 #include "list.h"
 #include "parser.h"
+#include "string_builder.h"
 #include "tac.h"
 #include "thir.h"
 #include "type.h"
@@ -43,8 +44,12 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  String_Builder sb = {0};
+  print_ast(ast_program, &sb);
+
   Thir *typed_program = type_program(ast_program, &context);
 
+  print_ir(typed_program, &sb);
   LIST_FOREACH(context.bindings, binding) {
     printf("binding {\n");
     if (binding->name) {
@@ -65,10 +70,9 @@ int main(int argc, char *argv[]) {
   Module module = {0};
   lower_program(typed_program, &module);
 
-  String_Builder sb = {0};
   print_module(&module, &sb);
-
   printf("%s\n", sb.value);
+  sb_free(&sb);
 
   return 0;
 }

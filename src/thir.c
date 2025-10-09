@@ -231,6 +231,7 @@ Thir *type_block(Ast *ast, Context *context) {
       exit(1);
     }
   }
+  block->block = statements;
 
   return block;
 }
@@ -310,12 +311,8 @@ Thir *type_call(Ast *ast, Context *context) {
 Thir *type_variable(Ast *ast, Context *context) {
   Thir *var = thir_alloc(context, THIR_VARIABLE, ast->span);
 
-  Binding binding = {0};
-  binding.ast = ast;
-  binding.thir = var;
-  binding.name = ast->variable.name;
-
   Thir *initializer = nullptr;
+  
   if (ast->variable.initializer) {
     initializer = type_expression(ast->variable.initializer, context);
   } else {
@@ -327,8 +324,15 @@ Thir *type_variable(Ast *ast, Context *context) {
     exit(1);
   }
 
+  Binding binding = {0};
+  binding.ast = ast;
+  binding.thir = initializer;
+  binding.name = ast->variable.name;
   binding.type = initializer->type;
   register_binding(context, binding);
+
+  // TODO: this variable system needs work, we have to do some backflips
+  var->binding = initializer->binding;
 
   return var;
 }

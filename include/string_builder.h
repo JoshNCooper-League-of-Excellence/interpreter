@@ -1,3 +1,6 @@
+#ifndef STRING_BUILDER_H
+#define STRING_BUILDER_H
+
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -51,3 +54,5 @@ static inline void sb_free(String_Builder *sb) {
   sb->capacity = 0;
   sb->length = 0;
 }
+
+#endif // #ifndef STRING_BUILDER_H

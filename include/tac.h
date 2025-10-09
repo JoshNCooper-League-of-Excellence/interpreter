@@ -92,13 +92,7 @@ typedef struct {
 int lower_expression(Thir *n, Function *fn, Module *m);
 void lower_block(Thir *block, Function *fn, Module *m);
 void lower_program(Thir *program, Module *m);
-void lower_variable(Thir *node, Function *fn, Module *m);
 void lower_function(Thir *node, Module *m);
-void lower_literal(Thir *node, Function *fn, Module *m);
-void lower_unary(Thir *node, Function *fn, Module *m);
-void lower_binary(Thir *node, Function *fn, Module *m);
-void lower_return(Thir *node, Function *fn, Module *m);
-void lower_call(Thir *node, Function *fn, Module *m);
 
 
 #include "string_builder.h"

@@ -131,6 +131,8 @@ void lower_function(Thir *fnode, Module *m) {
   fn->param_count = fnode->function.parameters.length;
   fn->const_start = m->constants.length;
 
+  // TODO: do we want to do this? we could easily get overlapping indices, 
+  // but I think everything's been resolved already?
   for (unsigned i = 0; i < fnode->function.parameters.length; ++i) {
     Binding *b = fnode->function.parameters.data[i];
     assert(b && "got invalid binding in parameter list while lowering");
@@ -202,7 +204,7 @@ void print_module(Module *m, String_Builder *sb) {
 
   sb_append(sb, "CONSTANTS:\n");
   LIST_FOREACH(m->constants, constant) {
-    sb_appendf(sb, "\t[%d]: \"%s\"", __i, constant);
+    sb_appendf(sb, "\t[%d]: \"%s\"\n", __i, constant);
   }
 
   sb_append(sb, "FUNCTIONS:\n");

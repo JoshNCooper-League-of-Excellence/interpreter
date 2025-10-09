@@ -68,4 +68,120 @@ Thir *type_binary(struct Ast *, Context *context);
 Thir *type_return(struct Ast *, Context *context);
 Thir *type_variable(struct Ast *, Context *context);
 
+#include "string_builder.h"
+
+static const char *thir_tag_names[] = {"PROGRAM", "VARIABLE", "FUNCTION",
+                                       "BLOCK",   "LITERAL",  "UNARY",
+                                       "BINARY",  "RETURN",   "CALL"};
+
+static inline void print_indent_ir(String_Builder *sb, int indent) {
+  for (int i = 0; i < indent; ++i) {
+    sb_append(sb, "  ");
+  }
+}
+
+static inline void print_ir_rec(Thir *node, String_Builder *sb, int indent) {
+  if (!node) {
+    print_indent_ir(sb, indent);
+    sb_append(sb, "null\n");
+    return;
+  }
+  print_indent_ir(sb, indent);
+  sb_append(sb, thir_tag_names[node->tag]);
+  sb_append(sb, "\n");
+
+  switch (node->tag) {
+  case THIR_PROGRAM:
+    for (size_t i = 0; i < node->program.length; ++i) {
+      print_ir_rec(node->program.data[i], sb, indent + 1);
+    }
+    break;
+  case THIR_BLOCK:
+    for (size_t i = 0; i < node->block.length; ++i) {
+      print_ir_rec(node->block.data[i], sb, indent + 1);
+    }
+    break;
+  case THIR_LITERAL:
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "value: ");
+    sb_append(sb, node->literal.value);
+    sb_append(sb, "\n");
+    break;
+  case THIR_FUNCTION:
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "name: ");
+    sb_append(sb, node->function.name);
+    sb_append(sb, "\n");
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "return_type: ");
+    sb_append(sb, node->function.return_type ? node->function.return_type->name
+                                             : "void");
+    sb_append(sb, "\n");
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "parameters:\n");
+    for (size_t i = 0; i < node->function.parameters.length; ++i) {
+      Binding *param = node->function.parameters.data[i];
+      print_indent_ir(sb, indent + 2);
+      sb_append(sb, param->type ? param->type->name : "unknown");
+      sb_append(sb, " ");
+      sb_append(sb, param->name);
+      sb_append(sb, "\n");
+    }
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "body:\n");
+    print_ir_rec(node->function.block, sb, indent + 2);
+    break;
+  case THIR_UNARY:
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "op: ");
+    sb_append(sb, token_type_to_string(node->unary.op));
+    sb_append(sb, "\n");
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "operand:\n");
+    print_ir_rec(node->unary.operand, sb, indent + 2);
+    break;
+  case THIR_BINARY:
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "op: ");
+    sb_append(sb, token_type_to_string(node->binary.op));
+    sb_append(sb, "\n");
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "left:\n");
+    print_ir_rec(node->binary.left, sb, indent + 2);
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "right:\n");
+    print_ir_rec(node->binary.right, sb, indent + 2);
+    break;
+  case THIR_RETURN:
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "value:\n");
+    print_ir_rec(node->return_value, sb, indent + 2);
+    break;
+  case THIR_VARIABLE:
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "name: ");
+    sb_append(sb, node->binding ? node->binding->name : "unknown");
+    sb_append(sb, "\n");
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "type: ");
+    sb_append(sb, node->type ? node->type->name : "unknown");
+    sb_append(sb, "\n");
+    break;
+  case THIR_CALL:
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "callee: ");
+    sb_append(sb, node->call.callee ? node->call.callee->name : "unknown");
+    sb_append(sb, "\n");
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "arguments:\n");
+    for (size_t i = 0; i < node->call.arguments.length; ++i) {
+      print_ir_rec(node->call.arguments.data[i], sb, indent + 2);
+    }
+  }
+}
+
+static inline void print_ir(Thir *ir, String_Builder *sb) {
+  print_ir_rec(ir, sb, 0);
+}
+
 #endif

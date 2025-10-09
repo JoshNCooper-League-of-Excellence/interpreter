@@ -79,4 +79,137 @@ typedef struct Ast {
 
 } Ast;
 
+#include "string_builder.h"
+
+static inline void print_ast(Ast *ast, String_Builder *sb);
+
+static inline  void print_indent(String_Builder *sb, int indent) {
+  for (int i = 0; i < indent; ++i) {
+    sb_append(sb, "  ");
+  }
+}
+
+static const char *ast_tag_names[] = {
+    "ERROR", "PROGRAM", "LITERAL", "IDENTIFIER", "BLOCK", "FUNCTION",
+    "UNARY", "BINARY",  "RETURN",  "VARIABLE",   "CALL"};
+
+static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
+  if (!node) {
+    print_indent(sb, indent);
+    sb_append(sb, "null\n");
+    return;
+  }
+  print_indent(sb, indent);
+  sb_append(sb, ast_tag_names[node->tag]);
+  sb_append(sb, "\n");
+
+  switch (node->tag) {
+  case AST_PROGRAM:
+    for (size_t i = 0; i < node->program.length; ++i)
+      print_ast_rec(node->program.data[i], sb, indent + 1);
+    break;
+  case AST_BLOCK:
+    for (size_t i = 0; i < node->block.length; ++i)
+      print_ast_rec(node->block.data[i], sb, indent + 1);
+    break;
+  case AST_LITERAL:
+    print_indent(sb, indent + 1);
+    sb_append(sb, "value: ");
+    sb_append(sb, node->literal.value);
+    sb_append(sb, "\n");
+    print_indent(sb, indent + 1);
+    sb_append(sb, "type: ");
+    sb_append(sb, node->literal.tag == STRING ? "STRING" : "INTEGER");
+    sb_append(sb, "\n");
+    break;
+  case AST_IDENTIFIER:
+    print_indent(sb, indent + 1);
+    sb_append(sb, "name: ");
+    sb_append(sb, node->identifier);
+    sb_append(sb, "\n");
+    break;
+  case AST_FUNCTION:
+    print_indent(sb, indent + 1);
+    sb_append(sb, "name: ");
+    sb_append(sb, node->function.name);
+    sb_append(sb, "\n");
+    print_indent(sb, indent + 1);
+    sb_append(sb, "return_type: ");
+    sb_append(sb,
+              node->function.return_type ? node->function.return_type : "void");
+    sb_append(sb, "\n");
+    print_indent(sb, indent + 1);
+    sb_append(sb, "parameters:\n");
+    for (size_t i = 0; i < node->function.parameters.length; ++i) {
+      Parameter *param = &node->function.parameters.data[i];
+      print_indent(sb, indent + 2);
+      sb_append(sb, param->type);
+      sb_append(sb, " ");
+      sb_append(sb, param->identifier);
+      sb_append(sb, "\n");
+    }
+    print_indent(sb, indent + 1);
+    sb_append(sb, "body:\n");
+    print_ast_rec(node->function.block, sb, indent + 2);
+    break;
+  case AST_UNARY:
+    print_indent(sb, indent + 1);
+    sb_append(sb, "op: ");
+    sb_append(sb, token_type_to_string(node->unary.op));
+    sb_append(sb, "\n");
+    print_indent(sb, indent + 1);
+    sb_append(sb, "operand:\n");
+    print_ast_rec(node->unary.operand, sb, indent + 2);
+    break;
+  case AST_BINARY:
+    print_indent(sb, indent + 1);
+    sb_append(sb, "op: ");
+    sb_append(sb, token_type_to_string(node->binary.op));
+    sb_append(sb, "\n");
+    print_indent(sb, indent + 1);
+    sb_append(sb, "left:\n");
+    print_ast_rec(node->binary.left, sb, indent + 2);
+    print_indent(sb, indent + 1);
+    sb_append(sb, "right:\n");
+    print_ast_rec(node->binary.right, sb, indent + 2);
+    break;
+  case AST_RETURN:
+    print_indent(sb, indent + 1);
+    sb_append(sb, "value:\n");
+    print_ast_rec(node->return_value, sb, indent + 2);
+    break;
+  case AST_VARIABLE:
+    print_indent(sb, indent + 1);
+    sb_append(sb, "name: ");
+    sb_append(sb, node->variable.name);
+    sb_append(sb, "\n");
+    print_indent(sb, indent + 1);
+    sb_append(sb, "initializer:\n");
+    print_ast_rec(node->variable.initializer, sb, indent + 2);
+    break;
+  case AST_CALL:
+    print_indent(sb, indent + 1);
+    sb_append(sb, "callee: ");
+    sb_append(sb, node->call.callee);
+    sb_append(sb, "\n");
+    print_indent(sb, indent + 1);
+    sb_append(sb, "arguments:\n");
+    for (size_t i = 0; i < node->call.arguments.length; ++i)
+      print_ast_rec(node->call.arguments.data[i], sb, indent + 2);
+    break;
+  case AST_ERROR:
+    print_indent(sb, indent + 1);
+    sb_append(sb, "message: ");
+    sb_append(sb, node->error.message);
+    sb_append(sb, "\n");
+    print_indent(sb, indent + 1);
+    sb_append(sb, "fatal: ");
+    sb_append(sb, node->error.fatal ? "true" : "false");
+    sb_append(sb, "\n");
+    break;
+  }
+}
+
+static inline void print_ast(Ast *ast, String_Builder *sb) { print_ast_rec(ast, sb, 0); }
+
 #endif
