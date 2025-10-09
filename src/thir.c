@@ -417,6 +417,18 @@ Thir *type_call(Ast *ast, Context *context) {
   return call;
 }
 
+Type *get_type_from_ast_type(Ast *ast, Context *context) {
+  Type *type;
+  if (!try_find_type(context, ast->type.path, &type)) {
+    char *buf;
+    asprintf(&buf, "undeclared type: '%s' at: %s", ast->type.path,
+             lexer_span_to_string(ast->span));
+    fprintf(stderr, "%s\n", buf);
+    exit(1);
+  }
+  return type;
+}
+
 Thir *type_variable(Ast *ast, Context *context) {
   Thir *var = thir_alloc(context, THIR_VARIABLE, ast->span);
 
@@ -429,6 +441,26 @@ Thir *type_variable(Ast *ast, Context *context) {
     asprintf(&buf, "uninitialized variables not allowed: %d, at: %s",
              ast->variable.initializer->tag,
              lexer_span_to_string(ast->variable.initializer->span));
+    fprintf(stderr, "%s\n", buf);
+    exit(1);
+  }
+
+  if (!ast->variable.type) {
+    char *buf;
+    asprintf(&buf, "un-typed variables not allowed: %d, at: %s",
+             ast->variable.initializer->tag,
+             lexer_span_to_string(ast->variable.initializer->span));
+    fprintf(stderr, "%s\n", buf);
+    exit(1);
+  }
+
+  Type *type = get_type_from_ast_type(ast->variable.type, context);
+
+  if (initializer->type != type) {
+    char *buf;
+    asprintf(
+        &buf, "invalid type in declaration at: %s, expected %s, but got %s.",
+        lexer_span_to_string(ast->span), type->name, initializer->type->name);
     fprintf(stderr, "%s\n", buf);
     exit(1);
   }

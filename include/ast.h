@@ -19,6 +19,7 @@ typedef enum {
   AST_VARIABLE,
   AST_CALL,
   AST_EXTERN,
+  AST_TYPE,
 } Ast_Tag;
 
 typedef struct {
@@ -37,8 +38,15 @@ typedef struct Ast {
     Ast_Ptr_list program;
     Ast_Ptr_list block;
     struct Ast *return_value;
+
+    struct {
+      const char *path;
+      // Type_Extension_list extensions;
+    } type;
+
     struct {
       const char *name;
+      struct Ast *type;
       struct Ast *initializer;
     } variable;
     struct {
@@ -90,7 +98,7 @@ typedef struct Ast {
 
 static inline void print_ast(Ast *ast, String_Builder *sb);
 
-static inline  void print_indent(String_Builder *sb, int indent) {
+static inline void print_indent(String_Builder *sb, int indent) {
   for (int i = 0; i < indent; ++i) {
     sb_append(sb, "  ");
   }
@@ -98,7 +106,7 @@ static inline  void print_indent(String_Builder *sb, int indent) {
 
 static const char *ast_tag_names[] = {
     "ERROR", "PROGRAM", "LITERAL", "IDENTIFIER", "BLOCK", "FUNCTION",
-    "UNARY", "BINARY",  "RETURN",  "VARIABLE",   "CALL", "EXTERN"};
+    "UNARY", "BINARY",  "RETURN",  "VARIABLE",   "CALL",  "EXTERN"};
 
 static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   if (!node) {
@@ -111,6 +119,12 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   sb_append(sb, "\n");
 
   switch (node->tag) {
+  case AST_TYPE:
+    print_indent(sb, indent + 1);
+    sb_append(sb, "path: ");
+    sb_append(sb, node->type.path ? node->type.path : "null");
+    sb_append(sb, "\n");
+    break;
   case AST_EXTERN: {
     print_indent(sb, indent + 1);
     sb_append(sb, "name: ");
@@ -118,7 +132,9 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
     sb_append(sb, "\n");
     print_indent(sb, indent + 1);
     sb_append(sb, "return_type: ");
-    sb_append(sb, node->extern_function.return_type ? node->extern_function.return_type : "void");
+    sb_append(sb, node->extern_function.return_type
+                      ? node->extern_function.return_type
+                      : "void");
     sb_append(sb, "\n");
     print_indent(sb, indent + 1);
     sb_append(sb, "parameters:\n");
@@ -238,6 +254,8 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   }
 }
 
-static inline void print_ast(Ast *ast, String_Builder *sb) { print_ast_rec(ast, sb, 0); }
+static inline void print_ast(Ast *ast, String_Builder *sb) {
+  print_ast_rec(ast, sb, 0);
+}
 
 #endif

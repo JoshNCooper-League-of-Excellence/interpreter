@@ -71,7 +71,7 @@ Ast *parse_program(Lexer *lexer, Context *context) {
 
     switch (lexer_next(lexer)) {
     case TOKEN_IDENTIFIER: {
-      LIST_PUSH(statements, OK(parse_function(lexer, context)));
+      LIST_PUSH(statements, OK(parse_identifier(lexer, context)));
       break;
     }
     case TOKEN_EXTERN: {
@@ -107,10 +107,7 @@ Ast *parse_block(Lexer *lexer, Context *context) {
       lexer_eat(lexer);
       break;
     case TOKEN_IDENTIFIER:
-      LIST_PUSH(statements, OK(parse_expression(lexer, context)));
-      break;
-    case TOKEN_VAR:
-      LIST_PUSH(statements, OK(parse_variable(lexer, context)));
+      LIST_PUSH(statements, OK(parse_identifier(lexer, context)));
       break;
     case TOKEN_RETURN:
       lexer_eat(lexer);
@@ -235,6 +232,30 @@ Ast *parse_binary(Lexer *lexer, Context *context, Precedence precedence) {
   return left;
 }
 
+Ast *parse_identifier(Lexer *lexer, Context *context) {
+  Token one_ahead = lexer_lookahead(lexer, 1);
+  Token two_ahead = lexer_lookahead(lexer, 2);
+  if (two_ahead.type == TOKEN_ASSIGN) {
+    return parse_variable(lexer, context);
+  } else if (two_ahead.type == TOKEN_COLON) {
+    return parse_function(lexer, context);
+  } else if (one_ahead.type == TOKEN_LPAREN) {
+    return parse_expression(lexer, context); // Function call
+  } else {
+    return parser_error(context, lexer_span(lexer),
+                        "invalid identifier statement. expected variable or "
+                        "function declaration",
+                        true);
+  }
+}
+
+Ast *parse_type(Lexer *lexer, Context *context) {
+  Token name = EXPECT(TOKEN_IDENTIFIER);
+  Ast *ast = ast_alloc(context, AST_TYPE, name.span);
+  ast->type.path = name.value;
+  return ast;
+}
+
 Ast *parse_expression(Lexer *lexer, Context *context) {
   return parse_binary(lexer, context, PREC_NONE);
 }
@@ -322,13 +343,15 @@ Ast *parse_extern(Lexer *lexer, Context *context) {
 }
 
 Ast *parse_variable(Lexer *lexer, Context *context) {
-  BEGIN_SPAN(EXPECT(TOKEN_VAR));
-  Token identifier = EXPECT(TOKEN_IDENTIFIER);
+  BEGIN_SPAN(lexer_peek(lexer));
+  Ast *type = parse_type(lexer, context);
+  Token name = EXPECT(TOKEN_IDENTIFIER);
   EXPECT(TOKEN_ASSIGN);
   Ast *expression = OK(parse_expression(lexer, context));
   END_SPAN();
   Ast *var = ast_alloc(context, AST_VARIABLE, span);
-  var->variable.name = identifier.value;
+  var->variable.type = type;
+  var->variable.name = name.value;
   var->variable.initializer = expression;
   return var;
 }

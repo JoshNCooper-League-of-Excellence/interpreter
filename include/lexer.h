@@ -22,8 +22,6 @@ typedef enum {
   TOKEN_INTEGER,
   TOKEN_STRING,
 
-  TOKEN_VAR,
-
   TOKEN_COLON,
 
   TOKEN_LPAREN,
@@ -56,8 +54,6 @@ static inline const char *token_type_to_string(Token_Type type) {
     return "INTEGER";
   case TOKEN_STRING:
     return "STRING";
-  case TOKEN_VAR:
-    return "VAR";
   case TOKEN_COLON:
     return "COLON";
   case TOKEN_LPAREN:
@@ -148,17 +144,44 @@ static inline Token lexer_gettok(Lexer *lexer) {
     char c = lexer->input[lexer->pos];
     start = lexer->pos;
 
+    // Single-line comment (// ...)
     if (c == '/' && lexer->pos + 1 < lexer->length &&
         lexer->input[lexer->pos + 1] == '/') {
-      while (c != '\n' && lexer->pos < lexer->length) {
+      lexer->pos += 2;
+      lexer->col += 2;
+      while (lexer->pos < lexer->length && lexer->input[lexer->pos] != '\n') {
         lexer->pos++;
         lexer->col++;
-        c = lexer->input[lexer->pos];
       }
-      assert(lexer->input[lexer->pos] == '\n' &&
-             "expected a newline after a line comment");
-      lexer->pos++;
-      lexer->col++;
+      if (lexer->pos < lexer->length && lexer->input[lexer->pos] == '\n') {
+        lexer->pos++;
+        lexer->line++;
+        lexer->col = 1;
+      }
+      continue;
+    }
+
+    // Multi-line comment (/* ... */)
+    if (c == '/' && lexer->pos + 1 < lexer->length &&
+        lexer->input[lexer->pos + 1] == '*') {
+      lexer->pos += 2;
+      lexer->col += 2;
+      while (lexer->pos < lexer->length) {
+        if (lexer->input[lexer->pos] == '*' && lexer->pos + 1 < lexer->length &&
+            lexer->input[lexer->pos + 1] == '/') {
+          lexer->pos += 2;
+          lexer->col += 2;
+          break;
+        }
+        if (lexer->input[lexer->pos] == '\n') {
+          lexer->line++;
+          lexer->col = 1;
+        } else {
+          lexer->col++;
+        }
+        lexer->pos++;
+      }
+      continue;
     }
 
     if (c == '"') {
@@ -210,7 +233,6 @@ static inline Token lexer_gettok(Lexer *lexer) {
         size_t len;
       } keywords[] = {
           {"extern", TOKEN_EXTERN, 6},
-          {"var", TOKEN_VAR, 3},
           {"return", TOKEN_RETURN, 6},
       };
 
@@ -356,5 +378,12 @@ static inline Token_Type lexer_next(Lexer *lexer) {
 }
 
 static inline Span lexer_span(Lexer *lexer) { return lexer_peek(lexer).span; }
+
+static inline Token lexer_lookahead(Lexer *lexer, size_t n_tokens) {
+  lexer_fill_buffer(lexer);
+  if (n_tokens == 0 || n_tokens > lexer->lookahead.length)
+    return (Token){.type = TOKEN_EOF, .span = lexer->lookahead.data[0].span};
+  return lexer->lookahead.data[n_tokens];
+}
 
 #endif

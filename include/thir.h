@@ -97,6 +97,7 @@ Thir *type_unary(struct Ast *, Context *context);
 Thir *type_binary(struct Ast *, Context *context);
 Thir *type_return(struct Ast *, Context *context);
 Thir *type_variable(struct Ast *, Context *context);
+Type *get_type_from_ast_type(struct Ast *, Context *context);
 
 #include "string_builder.h"
 
