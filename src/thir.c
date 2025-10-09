@@ -134,12 +134,14 @@ Thir *type_program(Ast *ast, Context *context) {
   Thir *program = thir_alloc(context, THIR_PROGRAM, ast->span);
   Thir_Ptr_list statements = {0};
 
-  for (int i = 0; i < ast->program.length; ++i) {
-    Ast *statement = ast->program.data[i];
+  LIST_FOREACH(ast->program, statement) {
     switch (statement->tag) {
     case AST_ERROR:
       report_error(statement);
       break;
+    case AST_STRUCT: {
+      type_struct(statement, context);
+    } break;
     case AST_EXTERN: {
       Thir *thir = type_extern(statement, context);
       LIST_PUSH(statements, thir);
@@ -682,7 +684,8 @@ Thir *type_aggregate_initializer(Ast *ast, Context *context) {
       Struct_Type *struct_type = (Struct_Type *)type;
       string_list keys = {0};
       LIST_FOREACH(struct_type->members, member) {
-        if (value_types.length < __i) {
+        // off-by-one: when __i == value_types.length, we've run out of values
+        if (value_types.length <= __i) {
           char *buf;
           asprintf(&buf,
                    "too few values provided for aggregate initializer at: %s, "
@@ -709,15 +712,19 @@ Thir *type_aggregate_initializer(Ast *ast, Context *context) {
       Thir *thir = thir_alloc(context, THIR_AGGREGATE_INITIALIZER, ast->span);
       thir->aggregate_initializer.values = values;
       thir->aggregate_initializer.keys = keys;
-      return thir;
+      thir->type = type;
       LIST_FREE(value_types);
+      return thir;
     } else {
+      // Validate keys and types, then reorder (keyed) values to struct layout.
       string_list keys = ast->aggregate_initializer.keys;
-      for (int i = 0; i < keys.length; ++i) {
+      Struct_Type *struct_type = (Struct_Type *)type;
+
+      // 1) Validate provided keys exist and have matching types
+      for (unsigned int i = 0; i < keys.length; ++i) {
         const char *key = keys.data[i];
-        Struct_Type *struct_type = (Struct_Type *)type;
         int found = 0;
-        for (int j = 0; j < struct_type->members.length; ++j) {
+        for (unsigned int j = 0; j < struct_type->members.length; ++j) {
           if (strcmp(struct_type->members.data[j].name, key) == 0) {
             if (value_types.data[i] != struct_type->members.data[j].type) {
               char *buf;
@@ -742,17 +749,56 @@ Thir *type_aggregate_initializer(Ast *ast, Context *context) {
           exit(1);
         }
       }
+
+      Thir_Ptr_list reordered_values = {0};
+      string_list reordered_keys = {0};
+
+      for (unsigned int m = 0; m < struct_type->members.length; ++m) {
+        const char *member_name = struct_type->members.data[m].name;
+
+        // find this member in the provided keys
+        int provided_idx = -1;
+        for (unsigned int i = 0; i < keys.length; ++i) {
+          if (strcmp(keys.data[i], member_name) == 0) {
+            provided_idx = (int)i;
+            break;
+          }
+        }
+
+        // If the user did not provide a value for this member, skip it.
+        // (Alternative: error out if you require full coverage.)
+        if (provided_idx < 0)
+          continue;
+
+        LIST_PUSH(reordered_values, values.data[provided_idx]);
+        LIST_PUSH(reordered_keys, member_name);
+      }
+
       Thir *thir = thir_alloc(context, THIR_AGGREGATE_INITIALIZER, ast->span);
-      thir->aggregate_initializer.values = values;
-      thir->aggregate_initializer.keys = keys;
+      thir->aggregate_initializer.values = reordered_values;
+      thir->aggregate_initializer.keys = reordered_keys;
+      thir->type = type;
+
+      LIST_FREE(value_types);
       return thir;
     }
   } else {
     char *buf;
     asprintf(&buf,
-             "currently unsupported type for multi-value aggregate initializers at %s, type \"%s\"",
+             "currently unsupported type for multi-value aggregate "
+             "initializers at %s, type \"%s\"",
              lexer_span_to_string(ast->span), type->name);
     fprintf(stderr, "%s\n", buf);
     exit(1);
+  }
+}
+
+void type_struct(Ast *ast, Context *context) {
+  Struct_Type *type = struct_type_alloc(context, ast->$struct.name);
+  LIST_FOREACH(ast->$struct.members, member) {
+    Struct_Member struct_member;
+    struct_member.name = member.name;
+    struct_member.type = get_type_from_ast_type(member.type, context);
+    LIST_PUSH(type->members, struct_member);
   }
 }

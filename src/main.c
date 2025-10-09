@@ -13,7 +13,7 @@
 const char *CURRENTLY_COMPILING_FILE_NAME = "<no filename>";
 Extern_Function_list CACHED_EXTERNS;
 
-#define LOG_LEVEL 0
+#define LOG_LEVEL LOG_MAX
 #define NO_LOGS 0
 #define LOG_AST 1
 #define LOG_THIR 2
@@ -101,6 +101,7 @@ int main(int argc, char *argv[]) {
   }
 
   Module module = {0};
+  initialize_module(&module, &context);
   lower_program(typed_program, &module);
 
   if (LOG_LEVEL >= LOG_TAC) {

@@ -78,3 +78,13 @@ Function_Type *function_type_alloc(Context *context) {
   LIST_PUSH(context->type_table, (Type *)type);
   return type;
 }
+
+Struct_Type *struct_type_alloc(Context *context, const char *name) {
+  Struct_Type *type = malloc(sizeof(Struct_Type));
+  memset(type, 0, sizeof(Struct_Type));
+  type->base.index = context->type_table.length;
+  type->base.tag = TYPE_STRUCT;
+  type->base.name = name;
+  LIST_PUSH(context->type_table, (Type *)type);
+  return type;
+}

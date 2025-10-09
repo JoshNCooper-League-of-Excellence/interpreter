@@ -3,6 +3,7 @@
 #include "lexer.h"
 #include "list.h"
 #include "thir.h"
+#include "type.h"
 
 /* Notes:
    - This lowering uses binding->index for slots and fn->n_locals to allocate
@@ -56,6 +57,15 @@ DEFINE_LIST(int);
 int lower_expression(Thir *n, Function *fn, Module *m) {
   assert(n && "null expression while lowering");
   switch (n->tag) {
+  case THIR_AGGREGATE_INITIALIZER: {
+    int dest = generate_temp(fn);
+    EMIT_ALLOCA(&fn->code, dest, n->type->index);
+    LIST_FOREACH(n->aggregate_initializer.values, value) {
+      int v = lower_expression(value, fn, m);
+      EMIT_MEMBER_STORE(&fn->code, dest, __i, v);
+    }
+    return dest;
+  }
   case THIR_LITERAL: {
     int dest = generate_temp(fn);
     unsigned cidx = add_constant(m, n);
@@ -105,7 +115,10 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
     assert(n->call.callee && "null callee while lowering");
 
     if (n->call.callee->thir->tag == THIR_EXTERN) {
-      Instr instr = {.op = OP_CALL_EXTERN, .a = dest, .b = n->call.callee->thir->extern_function.index, .c = nargs};
+      Instr instr = {.op = OP_CALL_EXTERN,
+                     .a = dest,
+                     .b = n->call.callee->thir->extern_function.index,
+                     .c = nargs};
       EMIT(&fn->code, instr);
     } else {
       int func_idx = (int)n->call.callee->index;
@@ -209,6 +222,18 @@ void lower_program(Thir *program, Module *m) {
 
 void print_instr(Instr *i, String_Builder *sb) {
   switch (i->op) {
+  case OP_ALLOCA:
+    sb_appendf(sb, "ALLOCA t%d, type=%d", i->a, i->b);
+    break;
+  case OP_CALL_EXTERN:
+    sb_appendf(sb, "CALL_EXTERN t%d, ext%d, nargs=%d", i->a, i->b, i->c);
+    break;
+  case OP_MEMBER_LOAD:
+    sb_appendf(sb, "MEMBER_LOAD t%d, obj=t%d, idx=%d", i->a, i->b, i->c);
+    break;
+  case OP_MEMBER_STORE:
+    sb_appendf(sb, "MEMBER_STORE obj=t%d, idx=%d, src=t%d", i->a, i->b, i->c);
+    break;
   case OP_CONST:
     sb_appendf(sb, "CONST t%d, c%d", i->a, i->b);
     break;
@@ -247,6 +272,19 @@ void print_instr(Instr *i, String_Builder *sb) {
 
 void print_module(Module *m, String_Builder *sb) {
 
+  sb_append(sb, "TYPES:\n");
+  for (size_t i = 0; i < m->types.length; ++i) {
+    Type *type = m->types.data[i];
+    if (type->tag == TYPE_STRUCT) {
+      Struct_Type *struct_type = (Struct_Type *)type;
+      sb_appendf(sb, "[%zu]: struct %s {\n", i, type->name);
+      LIST_FOREACH(struct_type->members, member) {
+        sb_appendf(sb, "  [%zu]: %s\n", __i, member.type->name);
+      }
+      sb_append(sb, "}\n");
+    }
+  }
+
   sb_append(sb, "CONSTANTS:\n");
   LIST_FOREACH(m->constants, constant) {
     sb_appendf(sb, "\t[%d]: { type: %s, value: \"%s\" }\n", __i,
@@ -263,4 +301,8 @@ void print_module(Module *m, String_Builder *sb) {
       sb_append(sb, "\n");
     }
   }
+}
+
+void initialize_module(Module *m, Context *context) {
+  m->types = context->type_table;
 }

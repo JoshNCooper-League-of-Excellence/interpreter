@@ -70,6 +70,9 @@ Ast *parse_program(Lexer *lexer, Context *context) {
     }
 
     switch (lexer_next(lexer)) {
+    case TOKEN_STRUCT: {
+      LIST_PUSH(statements, OK(parse_struct(lexer, context)));
+    } break;
     case TOKEN_IDENTIFIER: {
       LIST_PUSH(statements, OK(parse_identifier(lexer, context)));
       break;
@@ -399,4 +402,33 @@ Ast *parse_aggregate_initializer(Lexer *lexer, Context *context) {
   aggregate->aggregate_initializer.keys = keys;
   aggregate->aggregate_initializer.values = values;
   return aggregate;
+}
+
+Ast *parse_struct(Lexer *lexer, Context *context) {
+  BEGIN_SPAN(EXPECT(TOKEN_STRUCT));
+  Ast_Struct_Member_list members = {0};
+  Token name_token = EXPECT(TOKEN_IDENTIFIER);
+  EXPECT(TOKEN_LCURLY);
+
+  while (true) {
+    if (lexer_next(lexer) == TOKEN_RCURLY) {
+      break;
+    }
+
+    Ast_Struct_Member member = {0};
+    member.name = EXPECT(TOKEN_IDENTIFIER).value;
+    member.type = parse_type(lexer, context);
+    LIST_PUSH(members, member);
+
+    if (lexer_next(lexer) != TOKEN_RCURLY) {
+      EXPECT(TOKEN_COMMA);
+    }
+  }
+
+  EXPECT(TOKEN_RCURLY);
+  END_SPAN()
+  Ast *ast = ast_alloc(context, AST_STRUCT, span);
+  ast->$struct.members = members;
+  ast->$struct.name = name_token.value;
+  return ast;
 }

@@ -3,9 +3,8 @@
 
 #include "list.h"
 #include "thir.h"
+#include "type.h"
 #include <stdlib.h>
-
-
 
 typedef enum {
   OP_CONST,
@@ -19,6 +18,9 @@ typedef enum {
   OP_CALL_EXTERN,
   OP_RET,
   OP_ARG,
+  OP_ALLOCA,
+  OP_MEMBER_LOAD,
+  OP_MEMBER_STORE,
 } Op_Code;
 
 typedef struct {
@@ -67,7 +69,10 @@ typedef struct {
   Function_Buffer functions;
   Constant_Buffer constants;
   Extern_Function_list externs;
+  Type_Ptr_list types;
 } Module;
+
+void initialize_module(Module *m, Context *context);
 
 #define EMIT($instruction_buffer, $instruction)                                \
   LIST_PTR_PUSH($instruction_buffer, $instruction);
@@ -105,11 +110,19 @@ typedef struct {
 
 #define EMIT_RET(buf, src) EMIT(buf, MAKE_INSTR1(OP_RET, (src)))
 
+#define EMIT_MEMBER_LOAD(buf, dest, target, index)                             \
+  EMIT(buf, MAKE_INSTR3(OP_MEMBER_LOAD, (dest), (target), (index)))
+
+#define EMIT_MEMBER_STORE(buf, target, index, src)                             \
+  EMIT(buf, MAKE_INSTR3(OP_MEMBER_STORE, (target), (index), (src)))
+
+#define EMIT_ALLOCA(buf, dest, type_index)                                     \
+  EMIT(buf, MAKE_INSTR2(OP_ALLOCA, (dest), (type_index)))
+
 int lower_expression(Thir *n, Function *fn, Module *m);
 void lower_block(Thir *block, Function *fn, Module *m);
 void lower_program(Thir *program, Module *m);
 void lower_function(Thir *node, Module *m);
-
 
 #include "string_builder.h"
 

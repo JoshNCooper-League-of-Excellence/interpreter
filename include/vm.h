@@ -15,6 +15,7 @@ typedef enum {
   VALUE_VOID, // this exists just for foreign functions that return void.
   VALUE_INTEGER,
   VALUE_STRING,
+  VALUE_STRUCT,
 } Value_Type;
 
 typedef struct Value {
@@ -22,6 +23,7 @@ typedef struct Value {
   union {
     int integer;
     char *string;
+    struct Value *$struct;
   };
 } Value;
 

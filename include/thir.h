@@ -100,6 +100,7 @@ Thir *type_identifier(struct Ast *, Context *context);
 Thir *type_block(struct Ast *, Context *context);
 Thir *type_function(struct Ast *, Context *context);
 Thir *type_extern(struct Ast *, Context *context);
+void type_struct(struct Ast *, Context *context);
 Thir *type_unary(struct Ast *, Context *context);
 Thir *type_binary(struct Ast *, Context *context);
 Thir *type_aggregate_initializer(struct Ast *, Context *context);

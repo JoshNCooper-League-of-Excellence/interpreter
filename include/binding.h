@@ -54,7 +54,8 @@ static inline bool try_find_type(Context *context, const char *name,
 
 static inline bool try_find_function_type(Context *context,
                                           Type_Ptr_list parameter_types,
-                                          Type *return_type, Function_Type **out) {
+                                          Type *return_type,
+                                          Function_Type **out) {
   LIST_FOREACH(context->type_table, type) {
     if (type->tag != TYPE_FUNCTION) {
       continue;
@@ -80,6 +81,7 @@ Thir_Ptr thir_alloc(Context *context, int tag, Span span);
 Type *type_alloc(Context *context);
 
 Function_Type *function_type_alloc(Context *context);
+Struct_Type *struct_type_alloc(Context *context, const char *name);
 
 Binding_Ptr bind_variable(Context *context, Binding binding);
 Binding_Ptr bind_function(Context *context, Binding binding, bool is_extern);

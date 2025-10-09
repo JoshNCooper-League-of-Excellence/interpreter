@@ -42,6 +42,7 @@ typedef enum {
   TOKEN_STAR,
   TOKEN_ASSIGN,
 
+  TOKEN_STRUCT,
 } Token_Type;
 
 static inline const char *token_type_to_string(Token_Type type) {
@@ -233,6 +234,7 @@ static inline Token lexer_gettok(Lexer *lexer) {
         size_t len;
       } keywords[] = {
           {"extern", TOKEN_EXTERN, 6},
+          {"struct", TOKEN_STRUCT, 6},
           {"return", TOKEN_RETURN, 6},
       };
 

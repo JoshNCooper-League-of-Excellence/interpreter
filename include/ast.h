@@ -21,6 +21,7 @@ typedef enum {
   AST_EXTERN,
   AST_TYPE,
   AST_AGGREGATE_INITIALIZER,
+  AST_STRUCT,
 } Ast_Tag;
 
 typedef struct {
@@ -36,6 +37,13 @@ typedef struct string_list {
   unsigned int capacity;
 } string_list;
 
+typedef struct {
+  const char *name;
+  struct Ast *type;
+} Ast_Struct_Member;
+
+DEFINE_LIST(Ast_Struct_Member)
+
 typedef struct Ast {
   Binding *binding;
   Span span;
@@ -45,6 +53,10 @@ typedef struct Ast {
     Ast_Ptr_list program;
     Ast_Ptr_list block;
     struct Ast *return_value;
+    struct {
+      const char *name;
+      Ast_Struct_Member_list members;
+    } $struct;
 
     struct {
       string_list keys;
@@ -61,6 +73,7 @@ typedef struct Ast {
       struct Ast *type;
       struct Ast *initializer;
     } variable;
+
     struct {
       struct Ast *left, *right;
       Token_Type op;
@@ -131,6 +144,22 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   sb_append(sb, "\n");
 
   switch (node->tag) {
+
+  case AST_STRUCT:
+    print_indent(sb, indent + 1);
+    sb_append(sb, "members:\n");
+    for (size_t i = 0; i < node->$struct.members.length; ++i) {
+      Ast_Struct_Member *member = &node->$struct.members.data[i];
+      print_indent(sb, indent + 2);
+      sb_append(sb, "name: ");
+      sb_append(sb, member->name);
+      sb_append(sb, "\n");
+      print_indent(sb, indent + 2);
+      sb_append(sb, "type:\n");
+      print_ast_rec(member->type, sb, indent + 3);
+    }
+    break;
+
   case AST_AGGREGATE_INITIALIZER:
     print_indent(sb, indent + 1);
     sb_append(sb, "values:\n");
