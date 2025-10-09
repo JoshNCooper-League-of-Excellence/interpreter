@@ -37,14 +37,16 @@ Binding_Ptr_list typer_convert_parameters(Context *context,
       exit(1);
     }
 
-    Binding *binding =
-        register_binding(context, (Binding){.thir = thir_param,
-                                            .ast = nullptr,
-                                            .name = param.identifier,
-                                            .type = param_type});
+    Binding binding = {.thir = thir_param,
+                       .ast = nullptr,
+                       .name = param.identifier,
+                       .type = param_type};
 
+    Binding_Ptr ptr = register_binding(context, binding);
+
+    thir_param->type = param_type;
     LIST_PTR_PUSH(argument_types, param_type);
-    LIST_PUSH(bindings, binding);
+    LIST_PUSH(bindings, ptr);
   }
 
   return bindings;
@@ -170,7 +172,7 @@ Thir *type_function(Ast *ast, Context *context) {
   binding.ast = ast;
   binding.thir = function;
   binding.name = ast->function.name;
-  binding.type = (Type*)type;
+  binding.type = (Type *)type;
 
   register_binding(context, binding);
 
@@ -195,9 +197,16 @@ Thir *type_literal(Ast *ast, Context *context) {
 }
 
 Thir *type_identifier(Ast *ast, Context *context) {
-  Thir *variable = thir_alloc(context, THIR_VARIABLE, ast->span);
-  variable->binding = get_binding(ast->variable.name, ast->span, context);
-  return variable;
+  Binding *binding = get_binding(ast->variable.name, ast->span, context);
+
+  if (!binding) {
+    char *buf;
+    asprintf(&buf, "use of undeclared identifier \"%s\" at: %s", ast->variable.name, lexer_span_to_string(&ast->span));
+    fprintf(stderr, "%s\n", buf);
+    exit(1);
+  }
+
+  return binding->thir;
 }
 
 Thir *type_block(Ast *ast, Context *context) {
@@ -312,7 +321,7 @@ Thir *type_variable(Ast *ast, Context *context) {
   Thir *var = thir_alloc(context, THIR_VARIABLE, ast->span);
 
   Thir *initializer = nullptr;
-  
+
   if (ast->variable.initializer) {
     initializer = type_expression(ast->variable.initializer, context);
   } else {
@@ -326,13 +335,15 @@ Thir *type_variable(Ast *ast, Context *context) {
 
   Binding binding = {0};
   binding.ast = ast;
-  binding.thir = initializer;
+  binding.thir = var;
   binding.name = ast->variable.name;
   binding.type = initializer->type;
-  register_binding(context, binding);
 
   // TODO: this variable system needs work, we have to do some backflips
-  var->binding = initializer->binding;
+  register_binding(context, binding);
+
+  var->type = initializer->type;
+  var->variable_initializer = initializer;
 
   return var;
 }

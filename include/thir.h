@@ -25,6 +25,7 @@ typedef struct Thir {
   union {
     Thir_Ptr_list program;
     Thir_Ptr_list block;
+
     struct {
       Type *return_type;
       Binding_Ptr_list parameters;
@@ -52,6 +53,8 @@ typedef struct Thir {
       Token_Type op;
     } unary;
 
+    struct Thir *variable_initializer;
+    
     struct Thir *return_value;
   };
 } Thir;

@@ -29,7 +29,16 @@ typedef struct {
   unsigned int capacity;
 } Instr_Buffer;
 
-typedef char const *Constant;
+typedef enum {
+  CONST_STRING,
+  CONST_INTEGER,
+} Constant_Type;
+
+typedef struct {
+  Constant_Type type;
+  const char *value;
+} Constant;
+
 typedef struct {
   Constant *data;
   unsigned int length;
@@ -62,6 +71,8 @@ typedef struct {
 #define MAKE_INSTR1(op, a) ((Instr){(op), (a), 0, 0})
 #define MAKE_INSTR2(op, a, b) ((Instr){(op), (a), (b), 0})
 #define MAKE_INSTR3(op, a, b, c) ((Instr){(op), (a), (b), (c)})
+
+#define EMIT_ARG(buf, index, src) EMIT(buf, MAKE_INSTR2(OP_ARG, (index), (src)))
 
 #define EMIT_CONST(buf, dest, const_idx)                                       \
   EMIT(buf, MAKE_INSTR2(OP_CONST, (dest), (const_idx)))

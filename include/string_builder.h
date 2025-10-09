@@ -25,7 +25,7 @@ static inline void sb_append(String_Builder *sb, const char *str) {
 }
 
 static inline void sb_appendf(String_Builder *sb, const char *format, ...) {
-  char buffer[1024];
+  char buffer[4096];
   va_list args;
   va_start(args, format);
   vsnprintf(buffer, sizeof(buffer), format, args);

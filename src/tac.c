@@ -1,18 +1,50 @@
 #include "tac.h"
 #include "binding.h"
+#include "lexer.h"
 #include "list.h"
 #include "thir.h"
 
 /* Notes:
-   - This lowering uses binding->index for slots and fn->n_locals to allocate temps.
+   - This lowering uses binding->index for slots and fn->n_locals to allocate
+   temps.
 
    - Keep bindings' index assignment consistent between typing and lowering or
      assign all per-function binding indices in lower_function.
 */
 
-unsigned add_constant(Module *m, const char *s) {
+unsigned add_constant(Module *m, Thir *thir) {
+
+  Constant_Type type = CONST_INTEGER;
+  if (strcmp(thir->type->name, "string") == 0) {
+    type = CONST_STRING;
+  } else {
+    assert(strcmp(thir->type->name, "int") == 0 &&
+           "invalid constant type, expected 'int' or 'string'");
+  }
+
+  const char *value = thir->literal.value;
+
+  // We already have a constant that matches this one, re-use it.
+  LIST_FOREACH(m->constants, constant) {
+    if (strcmp(constant.value, value) == 0 && constant.type == type) {
+      printf("reusing constant: { type: %s, value: %s }\n",
+             type == CONST_INTEGER ? "int" : "string", value);
+      return __i;
+    }
+  }
+
+  printf("creating new constant (from: %s): { type: %s, value: %s }\n",
+         lexer_span_to_string(&thir->span),
+         type == CONST_INTEGER ? "int" : "string", value);
+
+  Constant constant = {
+      .type = type,
+      .value = value,
+  };
+
   unsigned index = m->constants.length;
-  LIST_PUSH(m->constants, s);
+  LIST_PUSH(m->constants, constant);
+
   return index;
 }
 
@@ -24,12 +56,14 @@ unsigned push_function(Module *m, Function *f) {
 
 int generate_temp(Function *fn) { return (int)(fn->n_locals++); }
 
+DEFINE_LIST(int);
+
 int lower_expression(Thir *n, Function *fn, Module *m) {
   assert(n && "null expression while lowering");
   switch (n->tag) {
   case THIR_LITERAL: {
     int dest = generate_temp(fn);
-    unsigned cidx = add_constant(m, n->literal.value);
+    unsigned cidx = add_constant(m, n);
     EMIT_CONST(&fn->code, dest, (int)cidx);
     return dest;
   }
@@ -65,13 +99,12 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
   }
   case THIR_CALL: {
     int nargs = (int)n->call.arguments.length;
-    /* convention choice: here we just evaluate args to temps and rely on
-       OP_CALL implementation to access them (e.g. last nargs temps, or you can
-       emit ARG instructions instead). For now eval args to ensure side effects
-       and allocate temps. */
+
     for (unsigned i = 0; i < n->call.arguments.length; ++i) {
-      (void)lower_expression(n->call.arguments.data[i], fn, m);
+      int dest = lower_expression(n->call.arguments.data[i], fn, m);
+      EMIT_ARG(&fn->code, i, dest);
     }
+
     int dest = generate_temp(fn);
     assert(n->call.callee && "null callee while lowering");
     int func_idx = (int)n->call.callee->index;
@@ -104,9 +137,7 @@ void lower_block(Thir *block, Function *fn, Module *m) {
       break;
     }
     case THIR_VARIABLE: {
-      assert(stmt->binding && stmt->binding->thir &&
-             "variable had no binding while lowering");
-      int src = lower_expression(stmt->binding->thir, fn, m);
+      int src = lower_expression(stmt->variable_initializer, fn, m);
       EMIT_STORE(&fn->code, (int)stmt->binding->index, src);
       break;
     }
@@ -131,7 +162,7 @@ void lower_function(Thir *fnode, Module *m) {
   fn->param_count = fnode->function.parameters.length;
   fn->const_start = m->constants.length;
 
-  // TODO: do we want to do this? we could easily get overlapping indices, 
+  // TODO: do we want to do this? we could easily get overlapping indices,
   // but I think everything's been resolved already?
   for (unsigned i = 0; i < fnode->function.parameters.length; ++i) {
     Binding *b = fnode->function.parameters.data[i];
@@ -194,6 +225,9 @@ void print_instr(Instr *i, String_Builder *sb) {
   case OP_RET:
     sb_appendf(sb, "RET t%d", i->a);
     break;
+  case OP_ARG:
+    sb_appendf(sb, "ARG i=%d, src=t%d", i->a, i->b);
+    break;
   default:
     sb_appendf(sb, "UNKNOWN_OP %d", i->op);
     break;
@@ -204,7 +238,9 @@ void print_module(Module *m, String_Builder *sb) {
 
   sb_append(sb, "CONSTANTS:\n");
   LIST_FOREACH(m->constants, constant) {
-    sb_appendf(sb, "\t[%d]: \"%s\"\n", __i, constant);
+    sb_appendf(sb, "\t[%d]: { type: %s, value: \"%s\" }\n", __i,
+               constant.type == CONST_INTEGER ? "int" : "string",
+               constant.value);
   }
 
   sb_append(sb, "FUNCTIONS:\n");
