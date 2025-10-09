@@ -14,7 +14,27 @@ typedef enum {
   THIR_BINARY,
   THIR_RETURN,
   THIR_CALL,
+  THIR_EXTERN,
 } Thir_Tag;
+
+#include "ffi.h"
+
+DEFINE_LIST(ffi_type);
+
+typedef struct {
+  const char *name;
+  ffi_type_list parameters;
+  ffi_type return_type;
+  size_t index;
+  void *ptr;
+  Type *original_return_type;
+} Extern_Function;
+
+
+struct Thir;
+DEFINE_LIST(Extern_Function);
+extern Extern_Function_list CACHED_EXTERNS;
+Extern_Function get_ffi_function_from_thir(struct Thir *thir);
 
 typedef struct Thir {
   Binding *binding;
@@ -25,6 +45,13 @@ typedef struct Thir {
   union {
     Thir_Ptr_list program;
     Thir_Ptr_list block;
+
+    struct {
+      Type *return_type;
+      Binding_Ptr_list parameters;
+      const char *name;
+      size_t index; // index of this function in CACHED_EXTERNS
+    } extern_function;
 
     struct {
       Type *return_type;
@@ -54,7 +81,7 @@ typedef struct Thir {
     } unary;
 
     struct Thir *variable_initializer;
-    
+
     struct Thir *return_value;
   };
 } Thir;
@@ -66,6 +93,7 @@ Thir *type_expression(struct Ast *, Context *context);
 Thir *type_identifier(struct Ast *, Context *context);
 Thir *type_block(struct Ast *, Context *context);
 Thir *type_function(struct Ast *, Context *context);
+Thir *type_extern(struct Ast *, Context *context);
 Thir *type_unary(struct Ast *, Context *context);
 Thir *type_binary(struct Ast *, Context *context);
 Thir *type_return(struct Ast *, Context *context);
@@ -73,9 +101,9 @@ Thir *type_variable(struct Ast *, Context *context);
 
 #include "string_builder.h"
 
-static const char *thir_tag_names[] = {"PROGRAM", "VARIABLE", "FUNCTION",
-                                       "BLOCK",   "LITERAL",  "UNARY",
-                                       "BINARY",  "RETURN",   "CALL"};
+static const char *thir_tag_names[] = {
+    "PROGRAM", "VARIABLE", "FUNCTION", "BLOCK", "LITERAL",
+    "UNARY",   "BINARY",   "RETURN",   "CALL",  "EXTERN"};
 
 static inline void print_indent_ir(String_Builder *sb, int indent) {
   for (int i = 0; i < indent; ++i) {
@@ -94,6 +122,28 @@ static inline void print_ir_rec(Thir *node, String_Builder *sb, int indent) {
   sb_append(sb, "\n");
 
   switch (node->tag) {
+  case THIR_EXTERN:
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "name: ");
+    sb_append(sb, node->extern_function.name);
+    sb_append(sb, "\n");
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "return_type: ");
+    sb_append(sb, node->extern_function.return_type
+                      ? node->extern_function.return_type->name
+                      : "void");
+    sb_append(sb, "\n");
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "parameters:\n");
+    for (size_t i = 0; i < node->extern_function.parameters.length; ++i) {
+      Binding *param = node->extern_function.parameters.data[i];
+      print_indent_ir(sb, indent + 2);
+      sb_append(sb, param->type ? param->type->name : "unknown");
+      sb_append(sb, " ");
+      sb_append(sb, param->name);
+      sb_append(sb, "\n");
+    }
+    break;
   case THIR_PROGRAM:
     for (size_t i = 0; i < node->program.length; ++i) {
       print_ir_rec(node->program.data[i], sb, indent + 1);

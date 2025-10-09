@@ -11,15 +11,31 @@
 #include <stddef.h>
 
 const char *CURRENTLY_COMPILING_FILE_NAME = "<no filename>";
+Extern_Function_list CACHED_EXTERNS;
+
+#define LOG_LEVEL 0
+#define NO_LOGS 0
+#define LOG_AST 1
+#define LOG_THIR 2
+#define LOG_BINDINGS 3
+#define LOG_TAC 4
+#define LOG_MAX 4
 
 int main(int argc, char *argv[]) {
+  CACHED_EXTERNS = (Extern_Function_list){0};
   Context context = {0};
 
   context.string_type = type_alloc(&context);
   context.string_type->name = "string";
+  context.string_type->tag = TYPE_STRING;
 
   context.integer_type = type_alloc(&context);
   context.integer_type->name = "int";
+  context.integer_type->tag = TYPE_INT;
+
+  Type *void_type = type_alloc(&context);
+  void_type->name = "void";
+  void_type->tag = TYPE_VOID;
 
 #if 0
   if (argc == 1) {
@@ -29,7 +45,7 @@ int main(int argc, char *argv[]) {
   const char *filename = argv[1];
 #else
   const char *filename = "input.bi";
-  #endif
+#endif
   CURRENTLY_COMPILING_FILE_NAME = filename;
 
   Ast *ast_program = parse_file(filename, &context);
@@ -46,34 +62,46 @@ int main(int argc, char *argv[]) {
   }
 
   String_Builder sb = {0};
-  print_ast(ast_program, &sb);
+  if (LOG_LEVEL >= LOG_AST) {
+    print_ast(ast_program, &sb);
+  }
 
   Thir *typed_program = type_program(ast_program, &context);
 
-  print_ir(typed_program, &sb);
-  LIST_FOREACH(context.bindings, binding) {
-    printf("binding {\n");
-    if (binding->name) {
-      printf("\tname: '%s'\n", binding->name);
-    } 
-    if (binding->ast) {
-      printf("\tAst: %p\n", binding->ast);
+  if (LOG_LEVEL >= LOG_THIR) {
+    print_ir(typed_program, &sb);
+  }
+
+  if (LOG_LEVEL >= LOG_BINDINGS) {
+    LIST_FOREACH(context.bindings, binding) {
+      printf("binding {\n");
+      if (binding->name) {
+        printf("\tname: '%s'\n", binding->name);
+      }
+      if (binding->ast) {
+        printf("\tAst: %p\n", binding->ast);
+      }
+      if (binding->thir) {
+        printf("\tThir: %p\n", binding->thir);
+      }
+      if (binding->type) {
+        printf("\ttype: %p aka %s\n", binding->type, binding->type->name);
+      }
+      printf("}\n");
     }
-    if (binding->thir) {
-      printf("\tThir: %p\n", binding->thir);
-    }
-    if (binding->type) {
-      printf("\ttype: %p aka %s\n", binding->type, binding->type->name);
-    }
-    printf("}\n");
   }
 
   Module module = {0};
   lower_program(typed_program, &module);
 
-  print_module(&module, &sb);
-  printf("%s\n", sb.value);
-  sb_free(&sb);
+  if (LOG_LEVEL >= LOG_TAC) {
+    print_module(&module, &sb);
+    printf("%s\n", sb.value);
+  }
+
+  if (LOG_LEVEL >= LOG_TAC) {
+    sb_free(&sb);
+  }
 
   vm_execute(&module);
 

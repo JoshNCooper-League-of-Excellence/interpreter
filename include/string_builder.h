@@ -1,6 +1,11 @@
 #ifndef STRING_BUILDER_H
 #define STRING_BUILDER_H
 
+#define _GNU_SOURCE
+#ifndef __USE_MISC
+  #define __USE_MISC
+#endif
+
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>

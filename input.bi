@@ -1,7 +1,13 @@
-printf :: (msg string, value int) int {}
+extern abs :: (b int) int;
+extern puts :: (s string) int;
+extern printf :: (s string, x int) int;
 
-main :: (a int, b int) int {
-  var xaryu = "Hello, World!";
-  printf(xaryu, 10);
+print_something :: () void {
+  var x = abs(100) * abs(0 - 100);
+  printf("x=%d\n", x);
+}
+
+main :: (a string) int {
+  print_something();
   return a + b;
 }

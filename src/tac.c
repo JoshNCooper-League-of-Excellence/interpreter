@@ -15,11 +15,13 @@
 unsigned add_constant(Module *m, Thir *thir) {
 
   Constant_Type type = CONST_INTEGER;
-  if (strcmp(thir->type->name, "string") == 0) {
+
+  if (thir->type->tag == TYPE_STRING) {
     type = CONST_STRING;
+  } else if (thir->type->tag == TYPE_INT) {
+    type = CONST_INTEGER;
   } else {
-    assert(strcmp(thir->type->name, "int") == 0 &&
-           "invalid constant type, expected 'int' or 'string'");
+    assert(false && "[TAC]: invalid constant type, expected 'int' or 'string'");
   }
 
   const char *value = thir->literal.value;
@@ -27,15 +29,10 @@ unsigned add_constant(Module *m, Thir *thir) {
   // We already have a constant that matches this one, re-use it.
   LIST_FOREACH(m->constants, constant) {
     if (strcmp(constant.value, value) == 0 && constant.type == type) {
-      printf("reusing constant: { type: %s, value: %s }\n",
-             type == CONST_INTEGER ? "int" : "string", value);
+      printf("reusing constant: { type: %s, value: %s }\n", type == CONST_INTEGER ? "int" : "string", value);
       return __i;
     }
   }
-
-  printf("creating new constant (from: %s): { type: %s, value: %s }\n",
-         lexer_span_to_string(&thir->span),
-         type == CONST_INTEGER ? "int" : "string", value);
 
   Constant constant = {
       .type = type,
@@ -106,9 +103,17 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
     }
 
     int dest = generate_temp(fn);
+
     assert(n->call.callee && "null callee while lowering");
-    int func_idx = (int)n->call.callee->index;
-    EMIT_CALL(&fn->code, dest, func_idx, nargs);
+
+    if (n->call.callee->thir->tag == THIR_EXTERN) {
+      Instr instr = {.op = OP_CALL_EXTERN, .a = dest, .b = 0, .c = nargs};
+      EMIT(&fn->code, instr);
+    } else {
+      int func_idx = (int)n->call.callee->index;
+      EMIT_CALL(&fn->code, dest, func_idx, nargs);
+    }
+
     return dest;
   }
   case THIR_UNARY: {
@@ -194,9 +199,13 @@ void lower_program(Thir *program, Module *m) {
   LIST_INIT(m->constants);
 
   LIST_FOREACH(program->program, f) {
-    assert(f->tag == THIR_FUNCTION &&
-           "unexpected node type while lowering. expected THIR_FUNCTION");
-    lower_function(f, m);
+    if (f->tag == THIR_EXTERN) {
+      continue; // We just ignore it.
+    } else {
+      assert(f->tag == THIR_FUNCTION &&
+             "unexpected node type while lowering. expected THIR_FUNCTION");
+      lower_function(f, m);
+    }
   }
 }
 

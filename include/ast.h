@@ -18,6 +18,7 @@ typedef enum {
   AST_RETURN,
   AST_VARIABLE,
   AST_CALL,
+  AST_EXTERN,
 } Ast_Tag;
 
 typedef struct {
@@ -67,6 +68,12 @@ typedef struct Ast {
     } function;
 
     struct {
+      Parameter_list parameters;
+      const char *return_type;
+      const char *name;
+    } extern_function;
+
+    struct {
       const char *callee;
       Ast_Ptr_list arguments;
     } call;
@@ -91,7 +98,7 @@ static inline  void print_indent(String_Builder *sb, int indent) {
 
 static const char *ast_tag_names[] = {
     "ERROR", "PROGRAM", "LITERAL", "IDENTIFIER", "BLOCK", "FUNCTION",
-    "UNARY", "BINARY",  "RETURN",  "VARIABLE",   "CALL"};
+    "UNARY", "BINARY",  "RETURN",  "VARIABLE",   "CALL", "EXTERN"};
 
 static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   if (!node) {
@@ -104,6 +111,27 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   sb_append(sb, "\n");
 
   switch (node->tag) {
+  case AST_EXTERN: {
+    print_indent(sb, indent + 1);
+    sb_append(sb, "name: ");
+    sb_append(sb, node->extern_function.name);
+    sb_append(sb, "\n");
+    print_indent(sb, indent + 1);
+    sb_append(sb, "return_type: ");
+    sb_append(sb, node->extern_function.return_type ? node->extern_function.return_type : "void");
+    sb_append(sb, "\n");
+    print_indent(sb, indent + 1);
+    sb_append(sb, "parameters:\n");
+    for (size_t i = 0; i < node->extern_function.parameters.length; ++i) {
+      Parameter *param = &node->extern_function.parameters.data[i];
+      print_indent(sb, indent + 2);
+      sb_append(sb, param->type);
+      sb_append(sb, " ");
+      sb_append(sb, param->identifier);
+      sb_append(sb, "\n");
+    }
+    break;
+  }
   case AST_PROGRAM:
     for (size_t i = 0; i < node->program.length; ++i)
       print_ast_rec(node->program.data[i], sb, indent + 1);

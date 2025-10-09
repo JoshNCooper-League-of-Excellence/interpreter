@@ -1,7 +1,7 @@
 PRJ_NAME := bindings
 COMPILER := clang
 COMPILER_FLAGS := -std=c23 -Iinclude -g
-LD_FLAGS := 
+LD_FLAGS := -lffi
 SRC_EXT_PAT := src/%.c
 OBJ_DIR := obj
 REL_OBJ_DIR := obj/release

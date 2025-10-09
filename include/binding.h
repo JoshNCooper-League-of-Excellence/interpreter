@@ -37,10 +37,12 @@ typedef struct {
 
   Ast_Ptr_list ast_list;
   Thir_Ptr_list thir_list;
+
+  Type *typer_expected_type;
 } Context;
 
-
-static inline bool try_find_type(Context *context, const char *name, Type **out) {
+static inline bool try_find_type(Context *context, const char *name,
+                                 Type **out) {
   LIST_FOREACH(context->type_table, type) {
     if (strcmp(name, type->name) == 0) {
       *out = type;
@@ -49,13 +51,37 @@ static inline bool try_find_type(Context *context, const char *name, Type **out)
   }
   return false;
 }
+
+static inline bool try_find_function_type(Context *context,
+                                          Type_Ptr_list parameter_types,
+                                          Type *return_type, Function_Type **out) {
+  LIST_FOREACH(context->type_table, type) {
+    if (type->tag != TYPE_FUNCTION) {
+      continue;
+    }
+    Function_Type *function = (Function_Type *)type;
+
+    if (return_type != function->returns) {
+      continue;
+    }
+
+    if (!LIST_EQ(function->parameters, parameter_types)) {
+      continue;
+    }
+
+    *out = function;
+    return true;
+  }
+  return false;
+}
+
 Ast_Ptr ast_alloc(Context *context, int tag, Span span);
 Thir_Ptr thir_alloc(Context *context, int tag, Span span);
 Type *type_alloc(Context *context);
+
 Function_Type *function_type_alloc(Context *context);
 
 Binding_Ptr bind_variable(Context *context, Binding binding);
-Binding_Ptr bind_function(Context *context, Binding binding);
-
+Binding_Ptr bind_function(Context *context, Binding binding, bool is_extern);
 
 #endif

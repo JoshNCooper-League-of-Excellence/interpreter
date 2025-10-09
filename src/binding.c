@@ -41,13 +41,15 @@ Binding_Ptr bind_variable(Context *context, Binding binding) {
   LIST_PUSH(context->bindings, ptr);
   return ptr;
 }
-Binding_Ptr bind_function(Context *context, Binding binding) {
+Binding_Ptr bind_function(Context *context, Binding binding, bool is_extern) {
   Binding_Ptr ptr = malloc(sizeof(Binding));
   memset(ptr, 0, sizeof(Binding));
   memcpy(ptr, &binding, sizeof(Binding));
 
-  ptr->index = context->functions;
-  context->functions++;
+  if (!is_extern) { // extern functions have no associations
+    ptr->index = context->functions;
+    context->functions++;
+  }
 
   if (binding.thir) {
     binding.thir->binding = ptr;
@@ -72,6 +74,7 @@ Function_Type *function_type_alloc(Context *context) {
   Function_Type *type = malloc(sizeof(Function_Type));
   memset(type, 0, sizeof(Function_Type));
   type->base.index = context->type_table.length;
+  type->base.tag = TYPE_FUNCTION;
   LIST_PUSH(context->type_table, (Type *)type);
   return type;
 }

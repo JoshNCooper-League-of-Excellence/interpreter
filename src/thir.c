@@ -5,6 +5,14 @@
 #include "list.h"
 #include "string_builder.h"
 #include "type.h"
+#include <dlfcn.h>
+#include <ffi.h>
+
+#define _GNU_SOURCE
+#ifndef __USE_MISC
+#define __USE_MISC
+#endif
+
 #include <stdio.h>
 
 const char *get_function_type_string(Type_Ptr_list arguments,
@@ -87,6 +95,10 @@ Binding *get_binding(const char *identifier, Span span, Context *context) {
       if (strcmp(thir->function.name, identifier) == 0) {
         return thir->binding;
       }
+    } else if (thir->tag == THIR_EXTERN) {
+      if (strcmp(thir->extern_function.name, identifier) == 0) {
+        return thir->binding;
+      }
     }
   }
 
@@ -96,12 +108,6 @@ Binding *get_binding(const char *identifier, Span span, Context *context) {
     }
     if (strcmp(type->name, identifier) == 0) {
       return type->binding;
-    }
-  }
-
-  LIST_FOREACH(context->bindings, binding) {
-    if (strcmp(binding->name, identifier) == 0 && binding->thir) {
-      return binding;
     }
   }
 
@@ -133,6 +139,10 @@ Thir *type_program(Ast *ast, Context *context) {
     case AST_ERROR:
       report_error(statement);
       break;
+    case AST_EXTERN: {
+      Thir *thir = type_extern(statement, context);
+      LIST_PUSH(statements, thir);
+    } break;
     case AST_FUNCTION:
       Thir *thir = type_function(statement, context);
       LIST_PUSH(statements, thir);
@@ -146,6 +156,47 @@ Thir *type_program(Ast *ast, Context *context) {
   return program;
 }
 
+Thir *type_extern(Ast *ast, Context *context) {
+  Thir *$extern = thir_alloc(context, THIR_EXTERN, ast->span);
+
+  const char *name = ast->extern_function.name;
+  $extern->extern_function.name = name;
+
+  Type_Ptr_list argument_types = {0};
+  $extern->extern_function.parameters = typer_convert_parameters(
+      context, ast->extern_function.parameters, ast->span, &argument_types);
+
+  Type *return_type;
+  if (!try_find_type(context, ast->extern_function.return_type, &return_type)) {
+    char *buf;
+    asprintf(&buf, "use of undeclared type as return type: '%s' at %s",
+             ast->extern_function.return_type,
+             lexer_span_to_string(&ast->span));
+    fprintf(stderr, "%s\n", buf);
+    exit(1);
+  }
+
+  $extern->extern_function.return_type = return_type;
+
+  Function_Type *type = function_type_alloc(context);
+  type->base.name = get_function_type_string(argument_types, return_type);
+  type->parameters = argument_types;
+  type->returns = return_type;
+
+  $extern->type = (Type *)type;
+  Binding binding = {0};
+  binding.ast = ast;
+  binding.thir = $extern;
+  binding.name = name;
+  binding.type = (Type *)type;
+  bind_function(context, binding, true);
+
+  Extern_Function ffi_function = get_ffi_function_from_thir($extern);
+  $extern->extern_function.index = ffi_function.index;
+
+  return $extern;
+}
+
 Thir *type_function(Ast *ast, Context *context) {
   Thir *function = thir_alloc(context, THIR_FUNCTION, ast->span);
   typeof(ast->function) ast_fn = ast->function;
@@ -157,8 +208,6 @@ Thir *type_function(Ast *ast, Context *context) {
   thir_fn->parameters = typer_convert_parameters(context, ast_fn.parameters,
                                                  ast->span, &argument_types);
 
-  thir_fn->block = type_block(ast_fn.block, context);
-
   Type *return_type;
   if (!try_find_type(context, ast_fn.return_type, &return_type)) {
     char *buf;
@@ -169,11 +218,18 @@ Thir *type_function(Ast *ast, Context *context) {
   }
 
   thir_fn->return_type = return_type;
+  context->typer_expected_type = thir_fn->return_type;
+  thir_fn->block = type_block(ast_fn.block, context);
+  context->typer_expected_type = nullptr;
 
-  Function_Type *type = function_type_alloc(context);
-  type->base.name = get_function_type_string(argument_types, return_type);
-  type->parameters = argument_types;
-  type->returns = return_type;
+  Function_Type *type;
+
+  if (!try_find_function_type(context, argument_types, return_type, &type)) {
+    type = function_type_alloc(context);
+    type->base.name = get_function_type_string(argument_types, return_type);
+    type->parameters = argument_types;
+    type->returns = return_type;
+  }
 
   function->type = (Type *)type;
   Binding binding = {0};
@@ -182,7 +238,7 @@ Thir *type_function(Ast *ast, Context *context) {
   binding.name = ast->function.name;
   binding.type = (Type *)type;
 
-  bind_function(context, binding);
+  bind_function(context, binding, false);
 
   return function;
 }
@@ -304,6 +360,18 @@ Thir *type_return(Ast *ast, Context *context) {
   Thir *ret = thir_alloc(context, THIR_RETURN, ast->span);
   if (ast->return_value) {
     ret->return_value = type_expression(ast->return_value, context);
+
+    if (context->typer_expected_type &&
+        ret->return_value->type != context->typer_expected_type) {
+      char *buf;
+      asprintf(&buf,
+               "[THIR]: invalid return, type \"%s\" does not match expected "
+               "\"%s\"\n",
+               ret->return_value->type->name,
+               context->typer_expected_type->name);
+      fprintf(stderr, "%s\n", buf);
+      exit(1);
+    }
   }
   return ret;
 }
@@ -356,4 +424,99 @@ Thir *type_variable(Ast *ast, Context *context) {
   var->variable_initializer = initializer;
 
   return var;
+}
+
+ffi_type type_to_ffi_type(Type *type) {
+  switch (type->tag) {
+  case TYPE_INT:
+    return ffi_type_sint32;
+  case TYPE_STRING:
+    return ffi_type_pointer;
+  case TYPE_VOID:
+    return ffi_type_void;
+  default:
+    fprintf(stderr, "unable to use type: %s with libffi\n", type->name);
+    exit(1);
+  }
+}
+
+Extern_Function get_ffi_function_from_thir(Thir *thir) {
+  LIST_FOREACH(CACHED_EXTERNS, cached) {
+    if (cached.name == thir->extern_function.name) {
+      return cached;
+    }
+  }
+
+  const char *LIB_SEARCH_PATHS[] = {"libm.so.6", "libm.so", "libc.so.6",
+                                    "libc.so", NULL};
+
+  static struct {
+    const char *name;
+    void *handle;
+  } open_libs[16] = {};
+  static int open_libs_count = 0;
+
+  void *handle = NULL;
+  void *symbol = NULL;
+
+  for (const char **p = LIB_SEARCH_PATHS; *p != NULL; ++p) {
+    int found = 0;
+    for (int i = 0; i < open_libs_count; ++i) {
+      if (strcmp(open_libs[i].name, *p) == 0) {
+        handle = open_libs[i].handle;
+        found = 1;
+        break;
+      }
+    }
+    if (!found) {
+      handle = dlopen(*p, RTLD_NOW);
+      if (handle) {
+
+        if (open_libs_count < (int)(sizeof(open_libs) / sizeof(open_libs[0]))) {
+          open_libs[open_libs_count].name = *p;
+          open_libs[open_libs_count].handle = handle;
+          ++open_libs_count;
+        } else {
+          fprintf(stderr, "unable to open dynamic library for ffi: too many "
+                          "libraries open\n");
+          exit(1);
+        }
+      }
+    }
+
+    if (!handle) {
+      continue;
+    }
+
+    dlerror();
+    symbol = dlsym(handle, thir->extern_function.name);
+
+    if (symbol) {
+      break;
+    }
+  }
+
+  if (!symbol) {
+    fprintf(stderr, "unable to find symbol '%s' in system libraries\n",
+            thir->extern_function.name);
+    exit(1);
+  }
+
+  Function_Type *type = (Function_Type *)thir->type;
+
+  Extern_Function extern_function = {
+      .name = thir->extern_function.name,
+      .parameters = {0},
+      .return_type = type_to_ffi_type(thir->function.return_type),
+      .index = CACHED_EXTERNS.length,
+      .ptr = symbol,
+      .original_return_type = type->returns};
+
+  LIST_FOREACH(thir->extern_function.parameters, parameter) {
+    LIST_PUSH(extern_function.parameters, type_to_ffi_type(parameter->type));
+  }
+
+  LIST_PUSH(CACHED_EXTERNS, extern_function);
+
+  return extern_function;
 }

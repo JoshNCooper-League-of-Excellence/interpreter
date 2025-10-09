@@ -5,6 +5,17 @@
 #include "list.h"
 #include <limits.h>
 
+void print_ast_function_header(Ast *function) {
+  printf("%s :: (", function->function.name);
+  LIST_FOREACH(function->function.parameters, param) {
+    printf("%s %s", param.identifier, param.type);
+    if (__i != function->function.parameters.length - 1) {
+      printf(", ");
+    }
+  }
+  printf(") %s\n", function->function.return_type);
+}
+
 #define EXPECT($expected)                                                      \
   ({                                                                           \
     Token tok = lexer_peek(lexer);                                             \
@@ -61,6 +72,10 @@ Ast *parse_program(Lexer *lexer, Context *context) {
     switch (lexer_next(lexer)) {
     case TOKEN_IDENTIFIER: {
       LIST_PUSH(statements, OK(parse_function(lexer, context)));
+      break;
+    }
+    case TOKEN_EXTERN: {
+      LIST_PUSH(statements, OK(parse_extern(lexer, context)));
       break;
     }
     default:
@@ -221,25 +236,27 @@ Ast *parse_expression(Lexer *lexer, Context *context) {
   return parse_binary(lexer, context, PREC_NONE);
 }
 
-Ast *parse_function(Lexer *lexer, Context *context) {
-  Token identifier = lexer_eat(lexer);
-  BEGIN_SPAN(identifier);
-  span = identifier.span;
+bool parse_function_header(Lexer *lexer, Context *context, const char **name,
+                           Parameter_list *parameters, const char **return_type,
+                           Span *span) {
+  Token identifier = EXPECT(TOKEN_IDENTIFIER);
+  *name = identifier.value;
+  *span = identifier.span;
   EXPECT(TOKEN_COLON);
   EXPECT(TOKEN_COLON);
   EXPECT(TOKEN_LPAREN);
 
-  Parameter_list parameters = {0};
+  *parameters = (Parameter_list){0};
   while (true) {
     Token peeked = lexer_peek(lexer);
     if (peeked.type == TOKEN_EOF || peeked.type == TOKEN_RPAREN) {
       break;
     }
 
-    Token name = EXPECT(TOKEN_IDENTIFIER);
-    Token type = EXPECT(TOKEN_IDENTIFIER);
-    Parameter parameter = {name.value, type.value};
-    LIST_PUSH(parameters, parameter);
+    Token param_name = EXPECT(TOKEN_IDENTIFIER);
+    Token param_type = EXPECT(TOKEN_IDENTIFIER);
+    Parameter parameter = {param_name.value, param_type.value};
+    LIST_PUSH(*parameters, parameter);
 
     if (lexer_next(lexer) != TOKEN_RPAREN) {
       EXPECT(TOKEN_COMMA);
@@ -248,25 +265,58 @@ Ast *parse_function(Lexer *lexer, Context *context) {
 
   EXPECT(TOKEN_RPAREN);
   Token returns = EXPECT(TOKEN_IDENTIFIER);
+  *return_type = returns.value;
+  return true;
+}
+
+Ast *parse_function(Lexer *lexer, Context *context) {
+  Span span;
+  const char *name;
+  Parameter_list parameters = {0};
+  const char *return_type;
+
+  if (!parse_function_header(lexer, context, &name, &parameters, &return_type,
+                             &span)) {
+    return NULL;
+  }
+
   Ast *block = OK(parse_block(lexer, context));
   END_SPAN();
 
   Ast *function = ast_alloc(context, AST_FUNCTION, span);
   function->function.block = block;
   function->function.parameters = parameters;
-  function->function.return_type = returns.value;
-  function->function.name = identifier.value;
+  function->function.return_type = return_type;
+  function->function.name = name;
 
-  printf("%s :: (", function->function.name);
-  LIST_FOREACH(parameters, param) {
-    printf("%s %s", param.identifier, param.type);
-    if (__i != parameters.length - 1) {
-      printf(", ");
-    }
-  }
-  printf(") %s\n", function->function.return_type);
+#if 0  
+  print_ast_function_header(function);
+#endif
 
   return function;
+}
+
+Ast *parse_extern(Lexer *lexer, Context *context) {
+  BEGIN_SPAN(EXPECT(TOKEN_EXTERN));
+  const char *name;
+  Parameter_list parameters = {0};
+  const char *return_type;
+  Span header_span;
+
+  if (!parse_function_header(lexer, context, &name, &parameters, &return_type,
+                             &header_span)) {
+    return NULL;
+  }
+  END_SPAN();
+
+  Ast *extern_ast = ast_alloc(context, AST_EXTERN, span);
+
+  extern_ast->extern_function.name = name;
+  extern_ast->extern_function.parameters = parameters;
+  extern_ast->extern_function.return_type = return_type;
+
+  EXPECT(TOKEN_SEMI);
+  return extern_ast;
 }
 
 Ast *parse_variable(Lexer *lexer, Context *context) {

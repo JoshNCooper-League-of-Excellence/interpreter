@@ -5,6 +5,8 @@
 #include "thir.h"
 #include <stdlib.h>
 
+
+
 typedef enum {
   OP_CONST,
   OP_LOAD,
@@ -14,6 +16,7 @@ typedef enum {
   OP_MUL,
   OP_DIV,
   OP_CALL,
+  OP_CALL_EXTERN,
   OP_RET,
   OP_ARG,
 } Op_Code;
@@ -63,6 +66,7 @@ typedef struct {
   Function *entry_point;
   Function_Buffer functions;
   Constant_Buffer constants;
+  Extern_Function_list externs;
 } Module;
 
 #define EMIT($instruction_buffer, $instruction)                                \
@@ -110,6 +114,5 @@ void lower_function(Thir *node, Module *m);
 #include "string_builder.h"
 
 void print_module(Module *m, String_Builder *sb);
-
 
 #endif

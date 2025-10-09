@@ -64,18 +64,18 @@
     (list).data[(list).length++] = (v);                                        \
   } while (0)
 
-  #define LIST_PTR_PUSH(list, v)                                                 \
-    do {                                                                         \
-      if ((list)->length == (list)->capacity) {                                  \
-        unsigned int newcap = (list)->capacity ? (list)->capacity * 4 : 1;       \
-        void *tmp = realloc((list)->data, newcap * sizeof *((list)->data));      \
-        if (!tmp)                                                               \
-          break;                                                                \
-        (list)->data = tmp;                                                     \
-        (list)->capacity = newcap;                                              \
-      }                                                                         \
-      (list)->data[(list)->length++] = (v);                                     \
-    } while (0)
+#define LIST_PTR_PUSH(list, v)                                                 \
+  do {                                                                         \
+    if ((list)->length == (list)->capacity) {                                  \
+      unsigned int newcap = (list)->capacity ? (list)->capacity * 4 : 1;       \
+      void *tmp = realloc((list)->data, newcap * sizeof *((list)->data));      \
+      if (!tmp)                                                                \
+        break;                                                                 \
+      (list)->data = tmp;                                                      \
+      (list)->capacity = newcap;                                               \
+    }                                                                          \
+    (list)->data[(list)->length++] = (v);                                      \
+  } while (0)
 
 /* LIST_POP uses GNU/Clang extensions (typeof + statement expression) to
  * synthesize a zero value */
@@ -109,10 +109,21 @@
     (list).length = 0;                                                         \
   } while (0)
 
-#define LIST_FOREACH(list, var)                                                 \
-  for (unsigned int __i = 0; __i < (list).length; ++__i)                        \
-    for (int __once = 1; __once; __once = 0)                                    \
+#define LIST_FOREACH(list, var)                                                \
+  for (unsigned int __i = 0; __i < (list).length; ++__i)                       \
+    for (int __once = 1; __once; __once = 0)                                   \
       for (typeof((list).data[0]) var = (list).data[__i]; __once; __once = 0)
 
-#endif
+#define LIST_EQ(list1, list2)                                                  \
+  (((list1).length == (list2).length) && ({                                    \
+     int __eq = 1;                                                             \
+     for (unsigned int __i = 0; __i < (list1).length; ++__i) {                 \
+       if ((list1).data[__i] != (list2).data[__i]) {                           \
+         __eq = 0;                                                             \
+         break;                                                                \
+       }                                                                       \
+     }                                                                         \
+     __eq;                                                                     \
+   }))
 
+#endif

@@ -1,12 +1,16 @@
 #ifndef LEXER_H
 #define LEXER_H
-#define _GNU_SOURCE
-#define __USE_MISC
 
-#include <assert.h>
+#define _GNU_SOURCE
+#ifndef __USE_MISC
+  #define __USE_MISC
+#endif
+
 #include "list.h"
+#include <assert.h>
 #include <ctype.h>
 #include <stddef.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +35,7 @@ typedef enum {
   TOKEN_SEMI,
   TOKEN_COMMA,
 
+  TOKEN_EXTERN,
   TOKEN_RETURN,
 
   TOKEN_PLUS,
@@ -143,14 +148,15 @@ static inline Token lexer_gettok(Lexer *lexer) {
     char c = lexer->input[lexer->pos];
     start = lexer->pos;
 
-
-    if (c == '/' && lexer->pos + 1 < lexer->length && lexer->input[lexer->pos + 1] == '/') {
+    if (c == '/' && lexer->pos + 1 < lexer->length &&
+        lexer->input[lexer->pos + 1] == '/') {
       while (c != '\n' && lexer->pos < lexer->length) {
         lexer->pos++;
         lexer->col++;
         c = lexer->input[lexer->pos];
       }
-      assert(lexer->input[lexer->pos] == '\n' && "expected a newline after a line comment");
+      assert(lexer->input[lexer->pos] == '\n' &&
+             "expected a newline after a line comment");
       lexer->pos++;
       lexer->col++;
     }
@@ -171,13 +177,13 @@ static inline Token lexer_gettok(Lexer *lexer) {
         }
         lexer->pos++;
       }
-      
+
       if (lexer->pos >= lexer->length) {
-        fprintf(stderr, "unterminated string literal at %s:%zu:%zu\n", 
+        fprintf(stderr, "unterminated string literal at %s:%zu:%zu\n",
                 lexer->filename, begin_line, begin_col);
         exit(1);
       }
-      
+
       size_t len = lexer->pos - start;
       char *str = malloc(len + 1);
       strncpy(str, lexer->input + start, len);
@@ -197,12 +203,24 @@ static inline Token lexer_gettok(Lexer *lexer) {
         lexer->col++;
       }
       size_t len = lexer->pos - start;
-      if (strncmp(lexer->input + start, "var", 3) == 0 && len == 3) {
-        return (Token){nullptr, false, TOKEN_VAR,
-                       .span = {begin_line, begin_col, len, start}};
-      } else if (strncmp(lexer->input + start, "return", 6) == 0 && len == 6) {
-        return (Token){nullptr, false, TOKEN_RETURN,
-                       .span = {begin_line, begin_col, len, start}};
+      
+      struct {
+        const char *kw;
+        Token_Type type;
+        size_t len;
+      } keywords[] = {
+          {"extern", TOKEN_EXTERN, 6},
+          {"var", TOKEN_VAR, 3},
+          {"return", TOKEN_RETURN, 6},
+      };
+
+      for (size_t i = 0; i < sizeof(keywords) / sizeof(keywords[0]); ++i) {
+        if (len == keywords[i].len &&
+            strncmp(lexer->input + start, keywords[i].kw, keywords[i].len) ==
+                0) {
+          return (Token){nullptr, false, keywords[i].type,
+                         .span = {begin_line, begin_col, len, start}};
+        }
       }
       char *ident = malloc(len + 1);
       strncpy(ident, lexer->input + start, len);

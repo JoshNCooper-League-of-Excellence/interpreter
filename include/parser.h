@@ -44,6 +44,7 @@ Ast *parse_primary(Lexer *lexer, Context *context);
 Ast *parse_binary(Lexer *lexer, Context *context, Precedence precedence);
 Ast *parse_expression(Lexer *lexer, Context *context);
 
+Ast *parse_extern(Lexer *lexer, Context *context);
 Ast *parse_function(Lexer *lexer, Context *context);
 Ast *parse_block(Lexer *lexer, Context *context);
 Ast *parse_variable(Lexer *lexer, Context *context);
