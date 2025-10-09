@@ -64,6 +64,19 @@
     (list).data[(list).length++] = (v);                                        \
   } while (0)
 
+  #define LIST_PTR_PUSH(list, v)                                                 \
+    do {                                                                         \
+      if ((list)->length == (list)->capacity) {                                  \
+        unsigned int newcap = (list)->capacity ? (list)->capacity * 4 : 1;       \
+        void *tmp = realloc((list)->data, newcap * sizeof *((list)->data));      \
+        if (!tmp)                                                               \
+          break;                                                                \
+        (list)->data = tmp;                                                     \
+        (list)->capacity = newcap;                                              \
+      }                                                                         \
+      (list)->data[(list)->length++] = (v);                                     \
+    } while (0)
+
 /* LIST_POP uses GNU/Clang extensions (typeof + statement expression) to
  * synthesize a zero value */
 #define LIST_POP(list)                                                         \

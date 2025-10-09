@@ -3,11 +3,29 @@
 #include "binding.h"
 #include "lexer.h"
 #include "list.h"
+#include "string_builder.h"
+#include "type.h"
+#include <stdio.h>
+
+const char *get_function_type_string(Type_Ptr_list arguments,
+                                     Type *return_type) {
+  String_Builder sb = {0};
+  sb_append(&sb, "function :: (");
+  LIST_FOREACH(arguments, arg) {
+    sb_append(&sb, arg->name);
+    if (__i != arguments.length - 1) {
+      sb_append(&sb, ", ");
+    }
+  }
+  sb_appendf(&sb, ") %s;", return_type->name);
+  return sb.value;
+}
 
 Binding *get_binding(const char *identifier, Span span, Context *context);
 
-Binding_Ptr_list typer_convert_parameters(Parameter_list parameters, Span span,
-                                          Context *context) {
+Binding_Ptr_list typer_convert_parameters(Context *context,
+                                          Parameter_list parameters, Span span,
+                                          Type_Ptr_list *argument_types) {
   Binding_Ptr_list bindings = {0};
   LIST_FOREACH(parameters, param) {
     Thir_Ptr thir_param = thir_alloc(context, THIR_VARIABLE, span);
@@ -25,6 +43,7 @@ Binding_Ptr_list typer_convert_parameters(Parameter_list parameters, Span span,
                                             .name = param.identifier,
                                             .type = param_type});
 
+    LIST_PTR_PUSH(argument_types, param_type);
     LIST_PUSH(bindings, binding);
   }
 
@@ -119,8 +138,9 @@ Thir *type_function(Ast *ast, Context *context) {
 
   thir_fn->block = type_block(ast_fn.block, context);
 
-  thir_fn->parameters =
-      typer_convert_parameters(ast_fn.parameters, ast->span, context);
+  Type_Ptr_list argument_types = {0};
+  thir_fn->parameters = typer_convert_parameters(context, ast_fn.parameters,
+                                                 ast->span, &argument_types);
 
   Type *return_type;
   if (!try_find_type(context, ast_fn.return_type, &return_type)) {
@@ -133,11 +153,18 @@ Thir *type_function(Ast *ast, Context *context) {
 
   thir_fn->return_type = return_type;
 
+  Function_Type *type = function_type_alloc(context);
+  type->base.name = get_function_type_string(argument_types, return_type);
+  type->parameters = argument_types;
+  type->returns = return_type;
+
+  function->type = (Type *)type;
+
   Binding binding = {0};
   binding.ast = ast;
   binding.thir = function;
   binding.name = ast->function.name;
-  binding.type = /* TODO: get function type */ nullptr;
+  binding.type = (Type *)type;
 
   register_binding(context, binding);
 
@@ -175,7 +202,7 @@ Thir *type_block(Ast *ast, Context *context) {
     switch (statement->tag) {
     case AST_ERROR:
       report_error(statement);
-    case AST_CALL: 
+    case AST_CALL:
       LIST_PUSH(statements, type_call(statement, context));
       break;
     case AST_UNARY:
@@ -258,14 +285,16 @@ Thir *type_return(Ast *ast, Context *context) {
 Thir *type_call(Ast *ast, Context *context) {
   Binding *callee = get_binding(ast->call.callee, ast->span, context);
   Thir_Ptr_list arguments = {0};
+
   LIST_FOREACH(ast->call.arguments, ast_arg) {
     Thir *arg = type_expression(ast_arg, context);
     LIST_PUSH(arguments, arg);
   }
+
   Thir *call = thir_alloc(context, THIR_CALL, ast->span);
   call->call.arguments = arguments;
   call->call.callee = callee;
-  // TODO: get the function type.
+
   return call;
 }
 
