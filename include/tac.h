@@ -20,7 +20,7 @@ typedef enum {
 
 typedef struct {
   Op_Code op;
-  int a, b, c;
+  size_t a, b, c;
 } Instr;
 
 typedef struct {
@@ -60,6 +60,7 @@ typedef struct {
 } Function_Buffer;
 
 typedef struct {
+  Function *entry_point;
   Function_Buffer functions;
   Constant_Buffer constants;
 } Module;

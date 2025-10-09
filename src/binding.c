@@ -23,11 +23,31 @@ Thir *thir_alloc(Context *context, int tag, Span span) {
   return thir;
 }
 
-Binding_Ptr register_binding(Context *context, Binding binding) {
+Binding_Ptr bind_variable(Context *context, Binding binding) {
   Binding_Ptr ptr = malloc(sizeof(Binding));
   memset(ptr, 0, sizeof(Binding));
   memcpy(ptr, &binding, sizeof(Binding));
-  ptr->index = context->bindings.length;
+
+  ptr->index = context->variables;
+  context->variables++;
+
+  if (binding.thir) {
+    binding.thir->binding = ptr;
+  }
+  if (binding.ast) {
+    binding.ast->binding = ptr;
+  }
+
+  LIST_PUSH(context->bindings, ptr);
+  return ptr;
+}
+Binding_Ptr bind_function(Context *context, Binding binding) {
+  Binding_Ptr ptr = malloc(sizeof(Binding));
+  memset(ptr, 0, sizeof(Binding));
+  memcpy(ptr, &binding, sizeof(Binding));
+
+  ptr->index = context->functions;
+  context->functions++;
 
   if (binding.thir) {
     binding.thir->binding = ptr;

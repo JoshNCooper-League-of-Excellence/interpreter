@@ -162,6 +162,10 @@ void lower_function(Thir *fnode, Module *m) {
   fn->param_count = fnode->function.parameters.length;
   fn->const_start = m->constants.length;
 
+  if (strcmp(fn->name, "main") == 0) {
+    m->entry_point = fn;
+  }
+
   // TODO: do we want to do this? we could easily get overlapping indices,
   // but I think everything's been resolved already?
   for (unsigned i = 0; i < fnode->function.parameters.length; ++i) {

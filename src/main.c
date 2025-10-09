@@ -7,12 +7,13 @@
 #include "tac.h"
 #include "thir.h"
 #include "type.h"
+#include "vm.h"
 #include <stddef.h>
 
 const char *CURRENTLY_COMPILING_FILE_NAME = "<no filename>";
 
 int main(int argc, char *argv[]) {
-  Context context;
+  Context context = {0};
 
   context.string_type = type_alloc(&context);
   context.string_type->name = "string";
@@ -73,6 +74,8 @@ int main(int argc, char *argv[]) {
   print_module(&module, &sb);
   printf("%s\n", sb.value);
   sb_free(&sb);
+
+  vm_execute(&module);
 
   return 0;
 }

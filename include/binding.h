@@ -32,6 +32,9 @@ typedef struct {
   Type *integer_type;
   Type_Ptr_list type_table;
   Binding_Ptr_list bindings;
+
+  size_t variables, functions;
+
   Ast_Ptr_list ast_list;
   Thir_Ptr_list thir_list;
 } Context;
@@ -50,6 +53,9 @@ Ast_Ptr ast_alloc(Context *context, int tag, Span span);
 Thir_Ptr thir_alloc(Context *context, int tag, Span span);
 Type *type_alloc(Context *context);
 Function_Type *function_type_alloc(Context *context);
-Binding_Ptr register_binding(Context *context, Binding binding);
+
+Binding_Ptr bind_variable(Context *context, Binding binding);
+Binding_Ptr bind_function(Context *context, Binding binding);
+
 
 #endif

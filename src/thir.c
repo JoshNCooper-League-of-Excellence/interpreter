@@ -42,7 +42,7 @@ Binding_Ptr_list typer_convert_parameters(Context *context,
                        .name = param.identifier,
                        .type = param_type};
 
-    Binding_Ptr ptr = register_binding(context, binding);
+    Binding_Ptr ptr = bind_variable(context, binding);
     thir_param->binding = ptr;
     thir_param->type = param_type;
 
@@ -182,7 +182,7 @@ Thir *type_function(Ast *ast, Context *context) {
   binding.name = ast->function.name;
   binding.type = (Type *)type;
 
-  register_binding(context, binding);
+  bind_function(context, binding);
 
   return function;
 }
@@ -350,7 +350,7 @@ Thir *type_variable(Ast *ast, Context *context) {
   binding.type = initializer->type;
 
   // TODO: this variable system needs work, we have to do some backflips
-  register_binding(context, binding);
+  bind_variable(context, binding);
 
   var->type = initializer->type;
   var->variable_initializer = initializer;
