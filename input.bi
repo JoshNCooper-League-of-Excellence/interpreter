@@ -9,5 +9,5 @@ print_something :: () void {
 
 main :: (a string) int {
   print_something();
-  return a + b;
+  return;
 }

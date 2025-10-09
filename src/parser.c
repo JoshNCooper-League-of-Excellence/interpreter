@@ -76,6 +76,7 @@ Ast *parse_program(Lexer *lexer, Context *context) {
     }
     case TOKEN_EXTERN: {
       LIST_PUSH(statements, OK(parse_extern(lexer, context)));
+      EXPECT(TOKEN_SEMI);
       break;
     }
     default:
@@ -100,9 +101,9 @@ Ast *parse_block(Lexer *lexer, Context *context) {
     if (peeked.type == TOKEN_RCURLY) {
       break;
     }
+
     switch (peeked.type) {
     case TOKEN_SEMI:
-      // ignore extraneous semis
       lexer_eat(lexer);
       break;
     case TOKEN_IDENTIFIER:
@@ -117,13 +118,13 @@ Ast *parse_block(Lexer *lexer, Context *context) {
         END_SPAN()
         Ast *return_expr = ast_alloc(context, AST_RETURN, span);
         return_expr->return_value = nullptr;
-        return return_expr;
+        LIST_PUSH(statements, return_expr);
+        break;
       }
       Ast *expression = OK(parse_expression(lexer, context));
       END_SPAN();
       Ast *return_expr = ast_alloc(context, AST_RETURN, span);
       return_expr->return_value = expression;
-      EXPECT(TOKEN_SEMI);
       LIST_PUSH(statements, return_expr);
       break;
     case TOKEN_EOF:
@@ -135,6 +136,8 @@ Ast *parse_block(Lexer *lexer, Context *context) {
       EXPECT(-2);
       break;
     }
+
+    EXPECT(TOKEN_SEMI);
   }
 
   EXPECT(TOKEN_RCURLY);
@@ -315,7 +318,6 @@ Ast *parse_extern(Lexer *lexer, Context *context) {
   extern_ast->extern_function.parameters = parameters;
   extern_ast->extern_function.return_type = return_type;
 
-  EXPECT(TOKEN_SEMI);
   return extern_ast;
 }
 
@@ -324,7 +326,6 @@ Ast *parse_variable(Lexer *lexer, Context *context) {
   Token identifier = EXPECT(TOKEN_IDENTIFIER);
   EXPECT(TOKEN_ASSIGN);
   Ast *expression = OK(parse_expression(lexer, context));
-  EXPECT(TOKEN_SEMI);
   END_SPAN();
   Ast *var = ast_alloc(context, AST_VARIABLE, span);
   var->variable.name = identifier.value;
