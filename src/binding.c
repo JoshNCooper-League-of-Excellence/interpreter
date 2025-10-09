@@ -26,7 +26,7 @@ Thir *thir_alloc(Context *context, int tag, Span span) {
 Binding_Ptr register_binding(Context *context, Binding binding) {
   Binding_Ptr ptr = malloc(sizeof(Binding));
   memset(ptr, 0, sizeof(Binding));
-  *ptr = binding;
+  memcpy(ptr, &binding, sizeof(Binding));
   ptr->index = context->bindings.length;
 
   if (binding.thir) {

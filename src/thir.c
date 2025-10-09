@@ -55,35 +55,42 @@ Binding *get_binding(const char *identifier, Span span, Context *context) {
     fprintf(stderr, "error: null identifier in get_binding()\n");
     exit(1);
   }
+
   LIST_FOREACH(context->ast_list, ast) {
-    if (!ast) {
-      fprintf(stderr, "error: null Ast in get_binding()\n");
-      exit(1);
+    if (!ast->binding) {
+      continue;
     }
     if (ast->tag == AST_VARIABLE) {
       if (strcmp(ast->variable.name, identifier) == 0) {
         return ast->binding;
       }
     } else if (ast->tag == AST_FUNCTION) {
-      if (strcmp(ast->function.name, identifier)) {
+      if (strcmp(ast->function.name, identifier) == 0) {
         return ast->binding;
       }
     }
   }
 
   LIST_FOREACH(context->thir_list, thir) {
+    if (!thir->binding) {
+      continue;
+    }
+
     if (thir->tag == THIR_VARIABLE) {
-      if (thir->binding && strcmp(thir->binding->name, identifier) == 0) {
+      if (strcmp(thir->binding->name, identifier) == 0) {
         return thir->binding;
       }
     } else if (thir->tag == THIR_FUNCTION) {
-      if (strcmp(thir->function.name, identifier)) {
+      if (strcmp(thir->function.name, identifier) == 0) {
         return thir->binding;
       }
     }
   }
 
   LIST_FOREACH(context->type_table, type) {
+    if (!type->binding) {
+      continue;
+    }
     if (strcmp(type->name, identifier) == 0) {
       return type->binding;
     }
@@ -132,10 +139,10 @@ Thir *type_program(Ast *ast, Context *context) {
 
 Thir *type_function(Ast *ast, Context *context) {
   Thir *function = thir_alloc(context, THIR_FUNCTION, ast->span);
-
   typeof(ast->function) ast_fn = ast->function;
   typeof(function->function) *thir_fn = &function->function;
 
+  thir_fn->name = ast->function.name;
   thir_fn->block = type_block(ast_fn.block, context);
 
   Type_Ptr_list argument_types = {0};
@@ -159,12 +166,11 @@ Thir *type_function(Ast *ast, Context *context) {
   type->returns = return_type;
 
   function->type = (Type *)type;
-
   Binding binding = {0};
   binding.ast = ast;
   binding.thir = function;
   binding.name = ast->function.name;
-  binding.type = (Type *)type;
+  binding.type = (Type*)type;
 
   register_binding(context, binding);
 
@@ -294,6 +300,9 @@ Thir *type_call(Ast *ast, Context *context) {
   Thir *call = thir_alloc(context, THIR_CALL, ast->span);
   call->call.arguments = arguments;
   call->call.callee = callee;
+
+  Function_Type *callee_type = (Function_Type *)callee->type;
+  call->type = callee_type->returns; // Set our type to the return type.
 
   return call;
 }

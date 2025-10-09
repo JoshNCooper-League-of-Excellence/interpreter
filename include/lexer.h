@@ -1,8 +1,8 @@
 #ifndef LEXER_H
 #define LEXER_H
-
 #define _GNU_SOURCE
 
+#include <assert.h>
 #include "list.h"
 #include <ctype.h>
 #include <stddef.h>
@@ -42,25 +42,44 @@ typedef enum {
 
 static inline const char *token_type_to_string(Token_Type type) {
   switch (type) {
-  case TOKEN_EOF: return "EOF";
-  case TOKEN_IDENTIFIER: return "IDENTIFIER";
-  case TOKEN_INTEGER: return "INTEGER";
-  case TOKEN_STRING: return "STRING";
-  case TOKEN_VAR: return "VAR";
-  case TOKEN_COLON: return "COLON";
-  case TOKEN_LPAREN: return "LPAREN";
-  case TOKEN_RPAREN: return "RPAREN";
-  case TOKEN_LCURLY: return "LCURLY";
-  case TOKEN_RCURLY: return "RCURLY";
-  case TOKEN_SEMI: return "SEMI";
-  case TOKEN_COMMA: return "COMMA";
-  case TOKEN_RETURN: return "RETURN";
-  case TOKEN_PLUS: return "PLUS";
-  case TOKEN_MINUS: return "MINUS";
-  case TOKEN_SLASH: return "SLASH";
-  case TOKEN_STAR: return "STAR";
-  case TOKEN_ASSIGN: return "ASSIGN";
-  default: return "UNKNOWN";
+  case TOKEN_EOF:
+    return "EOF";
+  case TOKEN_IDENTIFIER:
+    return "IDENTIFIER";
+  case TOKEN_INTEGER:
+    return "INTEGER";
+  case TOKEN_STRING:
+    return "STRING";
+  case TOKEN_VAR:
+    return "VAR";
+  case TOKEN_COLON:
+    return "COLON";
+  case TOKEN_LPAREN:
+    return "LPAREN";
+  case TOKEN_RPAREN:
+    return "RPAREN";
+  case TOKEN_LCURLY:
+    return "LCURLY";
+  case TOKEN_RCURLY:
+    return "RCURLY";
+  case TOKEN_SEMI:
+    return "SEMI";
+  case TOKEN_COMMA:
+    return "COMMA";
+  case TOKEN_RETURN:
+    return "RETURN";
+  case TOKEN_PLUS:
+    return "PLUS";
+  case TOKEN_MINUS:
+    return "MINUS";
+  case TOKEN_SLASH:
+    return "SLASH";
+  case TOKEN_STAR:
+    return "STAR";
+  case TOKEN_ASSIGN:
+    return "ASSIGN";
+  default:
+    return "UNKNOWN";
   }
 }
 
@@ -122,6 +141,52 @@ static inline Token lexer_gettok(Lexer *lexer) {
   while (lexer->pos < lexer->length) {
     char c = lexer->input[lexer->pos];
     start = lexer->pos;
+
+
+    if (c == '/' && lexer->pos + 1 < lexer->length && lexer->input[lexer->pos + 1] == '/') {
+      while (c != '\n' && lexer->pos < lexer->length) {
+        lexer->pos++;
+        lexer->col++;
+        c = lexer->input[lexer->pos];
+      }
+      assert(lexer->input[lexer->pos] == '\n' && "expected a newline after a line comment");
+      lexer->pos++;
+      lexer->col++;
+    }
+
+    if (c == '"') {
+      size_t begin_line = lexer->line;
+      size_t begin_col = lexer->col;
+      lexer->pos++;
+      lexer->col++;
+      size_t start = lexer->pos;
+
+      while (lexer->pos < lexer->length && lexer->input[lexer->pos] != '"') {
+        if (lexer->input[lexer->pos] == '\n') {
+          lexer->line++;
+          lexer->col = 1;
+        } else {
+          lexer->col++;
+        }
+        lexer->pos++;
+      }
+      
+      if (lexer->pos >= lexer->length) {
+        fprintf(stderr, "unterminated string literal at %s:%zu:%zu\n", 
+                lexer->filename, begin_line, begin_col);
+        exit(1);
+      }
+      
+      size_t len = lexer->pos - start;
+      char *str = malloc(len + 1);
+      strncpy(str, lexer->input + start, len);
+      str[len] = '\0';
+      lexer->pos++; // skip closing quote
+      lexer->col++;
+      return (Token){str, true, TOKEN_STRING,
+                     .span = {begin_line, begin_col, len + 2, start - 1}};
+    }
+
     if (isalpha(c)) {
       size_t begin_line = lexer->line;
       size_t begin_col = lexer->col;
@@ -211,29 +276,6 @@ static inline Token lexer_gettok(Lexer *lexer) {
       }
       lexer->pos++;
       continue;
-    } else if (c == '"') {
-      size_t begin_line = lexer->line;
-      size_t begin_col = lexer->col;
-      lexer->pos++; // skip opening quote
-      lexer->col++;
-      size_t start = lexer->pos;
-      while (lexer->pos < lexer->length && lexer->input[lexer->pos] != '"') {
-        if (lexer->input[lexer->pos] == '\n') {
-          lexer->line++;
-          lexer->col = 1;
-        } else {
-          lexer->col++;
-        }
-        lexer->pos++;
-      }
-      size_t len = lexer->pos - start;
-      char *str = malloc(len + 1);
-      strncpy(str, lexer->input + start, len);
-      str[len] = '\0';
-      lexer->pos++; // skip closing quote
-      lexer->col++;
-      return (Token){str, true, TOKEN_STRING,
-                     .span = {begin_line, begin_col, len, start}};
     } else {
       fprintf(stderr, "unexpected character in input ('%c') at %s:%zu:%zu", c,
               lexer->filename, lexer->line, lexer->col);
