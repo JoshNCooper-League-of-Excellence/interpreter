@@ -2,13 +2,14 @@
 #include "list.h"
 #include "string_builder.h"
 #include "tac.h"
+#include "type.h"
 #include <ffi.h>
 
 #define VM_ERRF(msg, ...)                                                      \
   fprintf(stderr, "[VM]: " msg "\n" __VA_OPT__(, ) __VA_ARGS__);               \
   exit(1);
 
-Stack_Frame stack_frame_create(Function *fn, int ret_dest, int caller) {
+Stack_Frame enter(Function *fn, int ret_dest, int caller) {
   Stack_Frame frame;
   frame.fn = fn;
   // always allocate at least a byte, to simplify freeing for now
@@ -18,7 +19,7 @@ Stack_Frame stack_frame_create(Function *fn, int ret_dest, int caller) {
   } else {
     frame.locals = nullptr;
   }
-
+  frame.n_locals = fn->n_locals;
   frame.ip = 0;
   frame.ret_dest = ret_dest;
   frame.caller = caller;
@@ -109,7 +110,7 @@ void vm_execute(Module *m) {
   int arg_count = 0;
 
   Function *entry = m->entry_point;
-  call_stack[0] = stack_frame_create(entry, -1, -1);
+  call_stack[0] = enter(entry, -1, -1);
   sp = 0;
 
   while (sp >= 0) {
@@ -120,9 +121,7 @@ void vm_execute(Module *m) {
       }
       Value rv = sf->locals[0];
 
-      if (sf->locals) {
-        free(sf->locals);
-      }
+      leave(sf);
 
       int caller_idx = sf->caller;
       int dest = sf->ret_dest;
@@ -135,24 +134,59 @@ void vm_execute(Module *m) {
     Instr instr = sf->fn->code.data[sf->ip++];
 
     switch (instr.op) {
+    case OP_ALLOCA: {
+      int dest = instr.a;
+      int idx = instr.b;
+      if (idx < 0 || (unsigned)idx >= m->types.length) {
+        VM_ERRF("invalid type index %d", idx);
+      }
+      call_stack[sp].locals[dest] = default_value_of_type(m->types.data[idx]);
+    } break;
+
+    case OP_MEMBER_LOAD: {
+      int dest = instr.a;
+      int struct_slot = instr.b;
+      int member_idx = instr.c;
+      Value *struct_val = &call_stack[sp].locals[struct_slot];
+      if (struct_val->type != VALUE_STRUCT) {
+        VM_ERRF("OP_MEMBER_LOAD: value at slot %d is not a struct",
+                struct_slot);
+      }
+      if (member_idx < 0 || (size_t)member_idx >= struct_val->$struct.length) {
+        VM_ERRF("OP_MEMBER_LOAD: invalid member index %d", member_idx);
+      }
+      call_stack[sp].locals[dest] = struct_val->$struct.members[member_idx];
+    } break;
+    case OP_MEMBER_STORE: {
+      int struct_slot = instr.a;
+      int member_idx = instr.b;
+      int src = instr.c;
+      Value *struct_val = &call_stack[sp].locals[struct_slot];
+      if (struct_val->type != VALUE_STRUCT) {
+        VM_ERRF("OP_MEMBER_STORE: value at slot %d is not a struct",
+                struct_slot);
+      }
+      if (member_idx < 0 || (size_t)member_idx >= struct_val->$struct.length) {
+        VM_ERRF("OP_MEMBER_STORE: invalid member index %d", member_idx);
+      }
+      struct_val->$struct.members[member_idx] = call_stack[sp].locals[src];
+    } break;
+
     case OP_CONST: {
       int dest = instr.a;
       int cidx = instr.b;
       call_stack[sp].locals[dest] = constants[cidx];
-      break;
-    }
+    } break;
     case OP_LOAD: {
       int dest = instr.a;
       int slot = instr.b;
       call_stack[sp].locals[dest] = call_stack[sp].locals[slot];
-      break;
-    }
+    } break;
     case OP_STORE: {
       int slot = instr.a;
       int src = instr.b;
       call_stack[sp].locals[slot] = call_stack[sp].locals[src];
-      break;
-    }
+    } break;
     case OP_ADD:
     case OP_SUB:
     case OP_MUL:
@@ -172,8 +206,7 @@ void vm_execute(Module *m) {
       }
       call_stack[sp].locals[dest].integer = result;
       call_stack[sp].locals[dest].type = VALUE_INTEGER;
-      break;
-    }
+    } break;
     case OP_ARG: {
       int index = instr.a;
       int src = instr.b;
@@ -183,8 +216,7 @@ void vm_execute(Module *m) {
           arg_count = index + 1;
         }
       }
-      break;
-    }
+    } break;
     case OP_CALL_EXTERN: {
       int dest = instr.a;
       int func_idx = instr.b;
@@ -201,8 +233,7 @@ void vm_execute(Module *m) {
 
       call_stack[sp].locals[dest] = value;
 
-      break;
-    }
+    } break;
     case OP_CALL: {
       int dest = instr.a;
       int func_idx = instr.b;
@@ -221,7 +252,7 @@ void vm_execute(Module *m) {
 
       /* create callee frame */
       int new_sp = sp + 1;
-      call_stack[new_sp] = stack_frame_create(callee, dest, sp);
+      call_stack[new_sp] = enter(callee, dest, sp);
 
       // copy args, then clear the stack
       for (int i = 0; i < nargs && (size_t)i < callee->param_count; ++i) {
@@ -231,8 +262,7 @@ void vm_execute(Module *m) {
 
       // jump to new stack frame
       sp = new_sp;
-      break;
-    }
+    } break;
     case OP_RET: {
       int src = instr.a;
       Value rv = {.type = VALUE_VOID};
@@ -242,9 +272,7 @@ void vm_execute(Module *m) {
       int caller_idx = call_stack[sp].caller;
       int ret_dest = call_stack[sp].ret_dest;
 
-      if (sf->locals) {
-        free(call_stack[sp].locals);
-      }
+      leave(sf);
 
       if (caller_idx == -1) {
         return;
@@ -252,8 +280,7 @@ void vm_execute(Module *m) {
       sp = caller_idx;
       if (ret_dest >= 0)
         call_stack[sp].locals[ret_dest] = rv;
-      break;
-    }
+    } break;
 
     default:
       VM_ERRF("unknown opcode %d", instr.op);
@@ -261,9 +288,7 @@ void vm_execute(Module *m) {
     }
   }
 
-  if (call_stack[0].locals) {
-    free(call_stack[0].locals);
-  }
+  leave(&call_stack[0]);
 }
 
 void print_value(Value *value, String_Builder *sb) {
@@ -274,8 +299,71 @@ void print_value(Value *value, String_Builder *sb) {
   case VALUE_STRING:
     sb_appendf(sb, "\"%s\"", value->string ? value->string : "(null)");
     break;
+  case VALUE_STRUCT: {
+    sb_appendf(sb, "{");
+    for (size_t i = 0; i < value->$struct.length; ++i) {
+      print_value(&value->$struct.members[i], sb);
+      if (i + 1 < value->$struct.length)
+        sb_appendf(sb, ", ");
+    }
+    sb_appendf(sb, "}");
+    break;
+  }
   default:
     sb_appendf(sb, "<unknown>");
     break;
+  }
+}
+Value default_value_of_type(Type *type) {
+  switch (type->tag) {
+  case TYPE_INT: {
+    return (Value){
+        .type = VALUE_INTEGER,
+        .integer = 0,
+    };
+  }
+  case TYPE_STRING: {
+    return (Value){
+        .type = VALUE_STRING,
+        .string = nullptr,
+    };
+  }
+  case TYPE_STRUCT: {
+    Struct_Type *struct_type = (Struct_Type *)type;
+    Value v;
+    v.type = VALUE_STRUCT;
+    v.$struct.length = struct_type->members.length;
+    v.$struct.members = calloc(struct_type->members.length, sizeof(Value));
+    for (size_t i = 0; i < struct_type->members.length; ++i) {
+      v.$struct.members[i] =
+          default_value_of_type(struct_type->members.data[i].type);
+    }
+    return v;
+  }
+  case TYPE_FUNCTION:
+  case TYPE_VOID:
+    return (Value){.type = VALUE_VOID};
+    break;
+  }
+}
+
+void value_free(Value *value) {
+  if (value->type == VALUE_STRUCT) {
+    for (int i = 0; i < value->$struct.length; ++i) {
+      value_free(&value->$struct.members[i]);
+    }
+    free(value->$struct.members);
+  }
+  *value = (Value){0};
+}
+
+void leave(Stack_Frame *frame) {
+  if (!frame->locals) {
+    return;
+  }
+
+  for (int i = 0; i < frame->n_locals; ++i) {
+    Value *value = &frame->locals[i];
+    value_free(value);
   }
 }

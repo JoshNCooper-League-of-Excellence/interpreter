@@ -23,9 +23,14 @@ typedef struct Value {
   union {
     int integer;
     char *string;
-    struct Value *$struct;
+    struct {
+      struct Value *members;
+      // this is num members
+      unsigned length;
+    } $struct;
   };
 } Value;
+
 
 void print_value(Value *value, String_Builder *sb);
 
@@ -34,6 +39,7 @@ void print_value(Value *value, String_Builder *sb);
 typedef struct {
   Function *fn;
   Value *locals; /* length = fn->n_locals */
+  int n_locals;
   unsigned ip;
   int ret_dest; /* caller temp index to store return, -1 = ignore */
   int caller;   /* index of caller frame in call_stack, -1 = none */
@@ -43,4 +49,7 @@ void vm_execute(Module *module);
 
 Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc);
 
+Value default_value_of_type(Type *type);
+
+void leave(Stack_Frame *frame);
 #endif // #ifndef VM_H
