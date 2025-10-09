@@ -169,9 +169,11 @@ Ast *parse_primary(Lexer *lexer, Context *context) {
   Token peeked = lexer_peek(lexer);
   BEGIN_SPAN(peeked);
   switch (peeked.type) {
+  case TOKEN_LCURLY: {
+    return parse_aggregate_initializer(lexer, context);
+  }
   case TOKEN_IDENTIFIER: {
     lexer_eat(lexer);
-
     if (lexer_next_is(lexer, TOKEN_LPAREN)) {
       return parse_call(peeked.value, lexer, context);
     }
@@ -188,7 +190,7 @@ Ast *parse_primary(Lexer *lexer, Context *context) {
     integer->literal.tag = INTEGER;
     integer->literal.value = peeked.value;
     return integer;
-  } break;
+  }
   case TOKEN_STRING: {
     lexer_eat(lexer);
     END_SPAN()
@@ -196,7 +198,7 @@ Ast *parse_primary(Lexer *lexer, Context *context) {
     integer->literal.tag = STRING;
     integer->literal.value = peeked.value;
     return integer;
-  } break;
+  }
   default:
     lexer_eat(lexer);
     char *buf;
@@ -354,4 +356,47 @@ Ast *parse_variable(Lexer *lexer, Context *context) {
   var->variable.name = name.value;
   var->variable.initializer = expression;
   return var;
+}
+
+Ast *parse_aggregate_initializer(Lexer *lexer, Context *context) {
+  BEGIN_SPAN(EXPECT(TOKEN_LCURLY));
+
+  Ast_Ptr_list values = {0};
+  string_list keys = {0};
+
+  // used with the (long named) macro to maintain homogenous lists.
+  // see the macro definition for more info.
+  bool parsing_only_values = false, set = false;
+
+  while (true) {
+    Token peeked = lexer_peek(lexer);
+    if (peeked.type == TOKEN_RCURLY) {
+      break;
+    }
+
+    Token one_ahead = lexer_lookahead(lexer, 1);
+
+    if (one_ahead.type == TOKEN_ASSIGN) {
+      // key = value
+      AGGREGATE_INITIALIZER_SET_CHECK_PARSING_KEY_VALUES(false);
+      Token key = EXPECT(TOKEN_IDENTIFIER);
+      LIST_PUSH(keys, key.value);
+      LIST_PUSH(values, OK(parse_expression(lexer, context)));
+    } else {
+      // just values
+      AGGREGATE_INITIALIZER_SET_CHECK_PARSING_KEY_VALUES(true);
+      LIST_PUSH(values, OK(parse_expression(lexer, context)));
+    }
+
+    if (lexer_next(lexer) != TOKEN_RCURLY) {
+      EXPECT(TOKEN_COMMA);
+    }
+  }
+
+  EXPECT(TOKEN_RCURLY);
+  END_SPAN();
+  Ast *aggregate = ast_alloc(context, AST_AGGREGATE_INITIALIZER, span);
+  aggregate->aggregate_initializer.keys = keys;
+  aggregate->aggregate_initializer.values = values;
+  return aggregate;
 }

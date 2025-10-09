@@ -11,7 +11,7 @@ extern printf :: (msg string, v int, v int) int;
 */
 
 main :: (args string) int {
-  int x = 100;
+  int x = {100};
   int y = x + 100;
   printf("Hello, World! x=%d, y=%d\n", x, y);
   return 0;

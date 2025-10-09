@@ -20,6 +20,7 @@ typedef enum {
   AST_CALL,
   AST_EXTERN,
   AST_TYPE,
+  AST_AGGREGATE_INITIALIZER,
 } Ast_Tag;
 
 typedef struct {
@@ -28,6 +29,12 @@ typedef struct {
 } Parameter;
 
 DEFINE_LIST(Parameter);
+
+typedef struct string_list {
+  const char **data;
+  unsigned int length;
+  unsigned int capacity;
+} string_list;
 
 typedef struct Ast {
   Binding *binding;
@@ -38,6 +45,11 @@ typedef struct Ast {
     Ast_Ptr_list program;
     Ast_Ptr_list block;
     struct Ast *return_value;
+
+    struct {
+      string_list keys;
+      Ast_Ptr_list values;
+    } aggregate_initializer;
 
     struct {
       const char *path;
@@ -119,6 +131,23 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   sb_append(sb, "\n");
 
   switch (node->tag) {
+  case AST_AGGREGATE_INITIALIZER:
+    print_indent(sb, indent + 1);
+    sb_append(sb, "values:\n");
+    for (size_t i = 0; i < node->aggregate_initializer.values.length; ++i) {
+      print_indent(sb, indent + 2);
+      if (node->aggregate_initializer.keys.data &&
+          i < node->aggregate_initializer.keys.length &&
+          node->aggregate_initializer.keys.data[i]) {
+        sb_append(sb, "key: ");
+        sb_append(sb, node->aggregate_initializer.keys.data[i]);
+        sb_append(sb, "\n");
+        print_indent(sb, indent + 2);
+      }
+      sb_append(sb, "value:\n");
+      print_ast_rec(node->aggregate_initializer.values.data[i], sb, indent + 3);
+    }
+    break;
   case AST_TYPE:
     print_indent(sb, indent + 1);
     sb_append(sb, "path: ");
@@ -257,5 +286,20 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
 static inline void print_ast(Ast *ast, String_Builder *sb) {
   print_ast_rec(ast, sb, 0);
 }
+
+// used to maintain homogenous aggregate initializers, only key values, or only
+// values. no mixing the kinds
+#define AGGREGATE_INITIALIZER_SET_CHECK_PARSING_KEY_VALUES(parsing_flag)       \
+  do {                                                                         \
+    if (!set) {                                                                \
+      parsing_only_values = (parsing_flag);                                    \
+      set = true;                                                              \
+    } else if ((parsing_only_values) != (parsing_flag)) {                      \
+      return parser_error(context, span,                                       \
+                          "aggregate initializers can only contain all "       \
+                          "values, or all key-value pairs.",                   \
+                          true);                                               \
+    }                                                                          \
+  } while (0)
 
 #endif

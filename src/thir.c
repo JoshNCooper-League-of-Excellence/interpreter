@@ -312,6 +312,8 @@ Thir *type_block(Ast *ast, Context *context) {
 
 Thir *type_expression(Ast *ast, Context *context) {
   switch (ast->tag) {
+  case AST_AGGREGATE_INITIALIZER:
+    return type_aggregate_initializer(ast, context);
   case AST_CALL:
     return type_call(ast, context);
   case AST_LITERAL:
@@ -434,17 +436,6 @@ Thir *type_variable(Ast *ast, Context *context) {
 
   Thir *initializer = nullptr;
 
-  if (ast->variable.initializer) {
-    initializer = type_expression(ast->variable.initializer, context);
-  } else {
-    char *buf;
-    asprintf(&buf, "uninitialized variables not allowed: %d, at: %s",
-             ast->variable.initializer->tag,
-             lexer_span_to_string(ast->variable.initializer->span));
-    fprintf(stderr, "%s\n", buf);
-    exit(1);
-  }
-
   if (!ast->variable.type) {
     char *buf;
     asprintf(&buf, "un-typed variables not allowed: %d, at: %s",
@@ -455,6 +446,20 @@ Thir *type_variable(Ast *ast, Context *context) {
   }
 
   Type *type = get_type_from_ast_type(ast->variable.type, context);
+
+  if (ast->variable.initializer) {
+    Type *old_expected = context->typer_expected_type;
+    context->typer_expected_type = type;
+    initializer = type_expression(ast->variable.initializer, context);
+    context->typer_expected_type = old_expected;
+  } else {
+    char *buf;
+    asprintf(&buf, "uninitialized variables not allowed: %d, at: %s",
+             ast->variable.initializer->tag,
+             lexer_span_to_string(ast->variable.initializer->span));
+    fprintf(stderr, "%s\n", buf);
+    exit(1);
+  }
 
   if (initializer->type != type) {
     char *buf;
@@ -652,4 +657,102 @@ Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc) {
 
   fprintf(stderr, "[VM:FFI] no return type was specified\n");
   exit(1);
+}
+
+Thir *type_aggregate_initializer(Ast *ast, Context *context) {
+  Type *type = context->typer_expected_type;
+
+  // if you just provide one value, such as {0}, and it's not a struct, just do
+  // stupid C++ initialization :D
+  if (type->tag != TYPE_STRUCT && ast->aggregate_initializer.keys.length == 0 &&
+      ast->aggregate_initializer.values.length == 1) {
+    return type_expression(ast->aggregate_initializer.values.data[0], context);
+  }
+
+  Type_Ptr_list value_types = {0};
+  Thir_Ptr_list values = {0};
+  LIST_FOREACH(ast->aggregate_initializer.values, value) {
+    Thir *v;
+    LIST_PUSH(values, v = type_expression(value, context));
+    LIST_PUSH(value_types, v->type);
+  }
+
+  if (type->tag == TYPE_STRUCT) {
+    if (ast->aggregate_initializer.keys.length == 0) {
+      Struct_Type *struct_type = (Struct_Type *)type;
+      string_list keys = {0};
+      LIST_FOREACH(struct_type->members, member) {
+        if (value_types.length < __i) {
+          char *buf;
+          asprintf(&buf,
+                   "too few values provided for aggregate initializer at: %s, "
+                   "expected: %d, got: %d",
+                   lexer_span_to_string(ast->span), struct_type->members.length,
+                   value_types.length);
+          fprintf(stderr, "%s\n", buf);
+          exit(1);
+        }
+        if (value_types.data[__i] != member.type) {
+          char *buf;
+          asprintf(
+              &buf,
+              "invalid type in aggregate initializer at: %s, expected %s, "
+              "got %s. (aggregate initializers must match the layout of the "
+              "struct when used without keys)",
+              lexer_span_to_string(ast->span), member.type->name,
+              value_types.data[__i]->name);
+          fprintf(stderr, "%s\n", buf);
+          exit(1);
+        }
+        LIST_PUSH(keys, member.name);
+      }
+      Thir *thir = thir_alloc(context, THIR_AGGREGATE_INITIALIZER, ast->span);
+      thir->aggregate_initializer.values = values;
+      thir->aggregate_initializer.keys = keys;
+      return thir;
+      LIST_FREE(value_types);
+    } else {
+      string_list keys = ast->aggregate_initializer.keys;
+      for (int i = 0; i < keys.length; ++i) {
+        const char *key = keys.data[i];
+        Struct_Type *struct_type = (Struct_Type *)type;
+        int found = 0;
+        for (int j = 0; j < struct_type->members.length; ++j) {
+          if (strcmp(struct_type->members.data[j].name, key) == 0) {
+            if (value_types.data[i] != struct_type->members.data[j].type) {
+              char *buf;
+              asprintf(&buf,
+                       "invalid type for key '%s' in aggregate initializer at: "
+                       "%s, expected %s, got %s.",
+                       key, lexer_span_to_string(ast->span),
+                       struct_type->members.data[j].type->name,
+                       value_types.data[i]->name);
+              fprintf(stderr, "%s\n", buf);
+              exit(1);
+            }
+            found = 1;
+            break;
+          }
+        }
+        if (!found) {
+          char *buf;
+          asprintf(&buf, "unknown key '%s' in aggregate initializer at: %s",
+                   key, lexer_span_to_string(ast->span));
+          fprintf(stderr, "%s\n", buf);
+          exit(1);
+        }
+      }
+      Thir *thir = thir_alloc(context, THIR_AGGREGATE_INITIALIZER, ast->span);
+      thir->aggregate_initializer.values = values;
+      thir->aggregate_initializer.keys = keys;
+      return thir;
+    }
+  } else {
+    char *buf;
+    asprintf(&buf,
+             "currently unsupported type for multi-value aggregate initializers at %s, type \"%s\"",
+             lexer_span_to_string(ast->span), type->name);
+    fprintf(stderr, "%s\n", buf);
+    exit(1);
+  }
 }

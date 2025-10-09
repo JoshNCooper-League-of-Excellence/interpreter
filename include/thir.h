@@ -1,6 +1,7 @@
 #ifndef THIR_H
 #define THIR_H
 
+#include "ast.h"
 #include "binding.h"
 #include "lexer.h"
 
@@ -15,6 +16,7 @@ typedef enum {
   THIR_RETURN,
   THIR_CALL,
   THIR_EXTERN,
+  THIR_AGGREGATE_INITIALIZER,
 } Thir_Tag;
 
 #include "ffi.h"
@@ -44,6 +46,11 @@ typedef struct Thir {
   union {
     Thir_Ptr_list program;
     Thir_Ptr_list block;
+
+    struct {
+      Thir_Ptr_list values;
+      string_list keys;
+    } aggregate_initializer;
 
     struct {
       Type *return_type;
@@ -95,6 +102,7 @@ Thir *type_function(struct Ast *, Context *context);
 Thir *type_extern(struct Ast *, Context *context);
 Thir *type_unary(struct Ast *, Context *context);
 Thir *type_binary(struct Ast *, Context *context);
+Thir *type_aggregate_initializer(struct Ast *, Context *context);
 Thir *type_return(struct Ast *, Context *context);
 Thir *type_variable(struct Ast *, Context *context);
 Type *get_type_from_ast_type(struct Ast *, Context *context);
@@ -122,6 +130,17 @@ static inline void print_ir_rec(Thir *node, String_Builder *sb, int indent) {
   sb_append(sb, "\n");
 
   switch (node->tag) {
+  case THIR_AGGREGATE_INITIALIZER:
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "values:\n");
+    for (size_t i = 0; i < node->aggregate_initializer.values.length; ++i) {
+      print_indent_ir(sb, indent + 2);
+      sb_append(sb, "key: ");
+      sb_append(sb, node->aggregate_initializer.keys.data[i]);
+      sb_append(sb, "\n");
+      print_ir_rec(node->aggregate_initializer.values.data[i], sb, indent + 2);
+    }
+    break;
   case THIR_EXTERN:
     print_indent_ir(sb, indent + 1);
     sb_append(sb, "name: ");
