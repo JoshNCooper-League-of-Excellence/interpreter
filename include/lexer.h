@@ -1,6 +1,7 @@
 #ifndef LEXER_H
 #define LEXER_H
 #define _GNU_SOURCE
+#define __USE_MISC
 
 #include <assert.h>
 #include "list.h"

@@ -3,6 +3,7 @@
 #include "lexer.h"
 #include "list.h"
 #include "parser.h"
+#include "tac.h"
 #include "thir.h"
 #include "type.h"
 #include <stddef.h>
@@ -44,7 +45,6 @@ int main(int argc, char *argv[]) {
 
   Thir *typed_program = type_program(ast_program, &context);
 
-
   LIST_FOREACH(context.bindings, binding) {
     printf("binding {\n");
     if (binding->name) {
@@ -61,6 +61,14 @@ int main(int argc, char *argv[]) {
     }
     printf("}\n");
   }
+
+  Module module = {0};
+  lower_program(typed_program, &module);
+
+  String_Builder sb = {0};
+  print_module(&module, &sb);
+
+  printf("%s\n", sb.value);
 
   return 0;
 }
