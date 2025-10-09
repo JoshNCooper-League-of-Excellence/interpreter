@@ -43,8 +43,9 @@ Binding_Ptr_list typer_convert_parameters(Context *context,
                        .type = param_type};
 
     Binding_Ptr ptr = register_binding(context, binding);
-
+    thir_param->binding = ptr;
     thir_param->type = param_type;
+
     LIST_PTR_PUSH(argument_types, param_type);
     LIST_PUSH(bindings, ptr);
   }
@@ -98,6 +99,12 @@ Binding *get_binding(const char *identifier, Span span, Context *context) {
     }
   }
 
+  LIST_FOREACH(context->bindings, binding) {
+    if (strcmp(binding->name, identifier) == 0 && binding->thir) {
+      return binding;
+    }
+  }
+
   char *buf;
   char *span_string = lexer_span_to_string(&span);
   asprintf(&buf, "use of undeclared identifier '%s' at: %s", identifier,
@@ -145,11 +152,12 @@ Thir *type_function(Ast *ast, Context *context) {
   typeof(function->function) *thir_fn = &function->function;
 
   thir_fn->name = ast->function.name;
-  thir_fn->block = type_block(ast_fn.block, context);
 
   Type_Ptr_list argument_types = {0};
   thir_fn->parameters = typer_convert_parameters(context, ast_fn.parameters,
                                                  ast->span, &argument_types);
+
+  thir_fn->block = type_block(ast_fn.block, context);
 
   Type *return_type;
   if (!try_find_type(context, ast_fn.return_type, &return_type)) {
@@ -201,7 +209,8 @@ Thir *type_identifier(Ast *ast, Context *context) {
 
   if (!binding) {
     char *buf;
-    asprintf(&buf, "use of undeclared identifier \"%s\" at: %s", ast->variable.name, lexer_span_to_string(&ast->span));
+    asprintf(&buf, "use of undeclared identifier \"%s\" at: %s",
+             ast->variable.name, lexer_span_to_string(&ast->span));
     fprintf(stderr, "%s\n", buf);
     exit(1);
   }
@@ -294,6 +303,7 @@ Thir *type_binary(Ast *ast, Context *context) {
 Thir *type_return(Ast *ast, Context *context) {
   Thir *ret = thir_alloc(context, THIR_RETURN, ast->span);
   if (ast->return_value) {
+    ret->return_value = type_expression(ast->return_value, context);
   }
   return ret;
 }

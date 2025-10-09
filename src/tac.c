@@ -132,7 +132,7 @@ void lower_block(Thir *block, Function *fn, Module *m) {
         int tmp = lower_expression(stmt->return_value, fn, m);
         EMIT_RET(&fn->code, tmp);
       } else {
-        EMIT_RET(&fn->code, 0);
+        EMIT_RET(&fn->code, -1);
       }
       break;
     }
