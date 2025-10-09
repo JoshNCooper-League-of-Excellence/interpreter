@@ -5,6 +5,7 @@
 #include "list.h"
 #include "string_builder.h"
 #include "type.h"
+#include "vm.h"
 #include <dlfcn.h>
 #include <ffi.h>
 
@@ -41,7 +42,7 @@ Binding_Ptr_list typer_convert_parameters(Context *context,
 
     if (!try_find_type(context, param.type, &param_type)) {
       fprintf(stderr, "unable to find type: '%s' at: %s\n", param.type,
-              lexer_span_to_string(&span));
+              lexer_span_to_string(span));
       exit(1);
     }
 
@@ -112,7 +113,7 @@ Binding *get_binding(const char *identifier, Span span, Context *context) {
   }
 
   char *buf;
-  char *span_string = lexer_span_to_string(&span);
+  char *span_string = lexer_span_to_string(span);
   asprintf(&buf, "use of undeclared identifier '%s' at: %s", identifier,
            span_string);
   fprintf(stderr, "%s\n", buf);
@@ -122,7 +123,7 @@ Binding *get_binding(const char *identifier, Span span, Context *context) {
 [[noreturn]]
 void report_error(Ast *error) {
   if (error && error->tag == AST_ERROR) {
-    const char *source_range = lexer_span_to_string(&error->span);
+    const char *source_range = lexer_span_to_string(error->span);
     fprintf(stderr, "Error at span %s: '%s'\n", source_range,
             error->error.message ? error->error.message : "Unknown error");
   }
@@ -170,8 +171,7 @@ Thir *type_extern(Ast *ast, Context *context) {
   if (!try_find_type(context, ast->extern_function.return_type, &return_type)) {
     char *buf;
     asprintf(&buf, "use of undeclared type as return type: '%s' at %s",
-             ast->extern_function.return_type,
-             lexer_span_to_string(&ast->span));
+             ast->extern_function.return_type, lexer_span_to_string(ast->span));
     fprintf(stderr, "%s\n", buf);
     exit(1);
   }
@@ -212,7 +212,7 @@ Thir *type_function(Ast *ast, Context *context) {
   if (!try_find_type(context, ast_fn.return_type, &return_type)) {
     char *buf;
     asprintf(&buf, "use of undeclared type as return type: '%s' at %s",
-             ast_fn.return_type, lexer_span_to_string(&ast->span));
+             ast_fn.return_type, lexer_span_to_string(ast->span));
     fprintf(stderr, "%s\n", buf);
     exit(1);
   }
@@ -266,7 +266,7 @@ Thir *type_identifier(Ast *ast, Context *context) {
   if (!binding) {
     char *buf;
     asprintf(&buf, "use of undeclared identifier \"%s\" at: %s",
-             ast->variable.name, lexer_span_to_string(&ast->span));
+             ast->variable.name, lexer_span_to_string(ast->span));
     fprintf(stderr, "%s\n", buf);
     exit(1);
   }
@@ -300,7 +300,7 @@ Thir *type_block(Ast *ast, Context *context) {
     default:
       char *buf;
       asprintf(&buf, "unexpected statement type in block: %d at: %s",
-               statement->tag, lexer_span_to_string(&ast->span));
+               statement->tag, lexer_span_to_string(ast->span));
       fprintf(stderr, "%s\n", buf);
       exit(1);
     }
@@ -325,7 +325,7 @@ Thir *type_expression(Ast *ast, Context *context) {
   default:
     char *buf;
     asprintf(&buf, "unexpected expression node type: %d, at %s", ast->tag,
-             lexer_span_to_string(&ast->span));
+             lexer_span_to_string(ast->span));
     fprintf(stderr, "%s\n", buf);
     exit(1);
   }
@@ -360,18 +360,26 @@ Thir *type_return(Ast *ast, Context *context) {
   Thir *ret = thir_alloc(context, THIR_RETURN, ast->span);
   if (ast->return_value) {
     ret->return_value = type_expression(ast->return_value, context);
-
     if (context->typer_expected_type &&
         ret->return_value->type != context->typer_expected_type) {
       char *buf;
       asprintf(&buf,
-               "[THIR]: invalid return, type \"%s\" does not match expected "
+               "invalid return type at: %s. \"%s\" does not match expected "
                "\"%s\"\n",
-               ret->return_value->type->name,
+               lexer_span_to_string(ast->span), ret->return_value->type->name,
                context->typer_expected_type->name);
       fprintf(stderr, "%s\n", buf);
       exit(1);
     }
+  } else if (context->typer_expected_type) {
+    char *buf;
+    asprintf(&buf,
+             "invalid return type at: %s. this function must return a value."
+             "expected: \"%s\"\n",
+             lexer_span_to_string(ast->span),
+             context->typer_expected_type->name);
+    fprintf(stderr, "%s\n", buf);
+    exit(1);
   }
   return ret;
 }
@@ -383,6 +391,20 @@ Thir *type_call(Ast *ast, Context *context) {
   LIST_FOREACH(ast->call.arguments, ast_arg) {
     Thir *arg = type_expression(ast_arg, context);
     LIST_PUSH(arguments, arg);
+  }
+
+  Thir *function = callee->thir;
+
+  int n_params = function->function.parameters.length;
+  if (n_params != arguments.length) {
+    char *buf;
+    asprintf(&buf,
+             "invalid call at %s: too %s arguments. expected %d, but got %d.",
+             lexer_span_to_string(ast->span),
+             n_params > arguments.length ? "few" : "many", n_params,
+             arguments.length);
+    fprintf(stderr, "%s\n", buf);
+    exit(1);
   }
 
   Thir *call = thir_alloc(context, THIR_CALL, ast->span);
@@ -406,7 +428,7 @@ Thir *type_variable(Ast *ast, Context *context) {
     char *buf;
     asprintf(&buf, "uninitialized variables not allowed: %d, at: %s",
              ast->variable.initializer->tag,
-             lexer_span_to_string(&ast->variable.initializer->span));
+             lexer_span_to_string(ast->variable.initializer->span));
     fprintf(stderr, "%s\n", buf);
     exit(1);
   }
@@ -447,8 +469,12 @@ Extern_Function get_ffi_function_from_thir(Thir *thir) {
     }
   }
 
-  const char *LIB_SEARCH_PATHS[] = {"libm.so.6", "libm.so", "libc.so.6",
-                                    "libc.so", NULL};
+  const char *LIB_SEARCH_PATHS[] = {"libm.so.6",
+                                    "libm.so",
+                                    "libc.so.6",
+                                    "libc.so",
+                                    "/home/josh/source/c/bindings/libb.so",
+                                    NULL};
 
   static struct {
     const char *name;
@@ -519,4 +545,79 @@ Extern_Function get_ffi_function_from_thir(Thir *thir) {
   LIST_PUSH(CACHED_EXTERNS, extern_function);
 
   return extern_function;
+}
+
+Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc) {
+  ffi_cif cif;
+
+  if (!function.ptr) {
+    fprintf(stderr, "[VM:FFI] error: function.ptr is (nil) for extern '%s'\n",
+            function.name);
+    exit(1);
+  }
+
+  size_t n_params = function.parameters.length;
+  ffi_type *arg_types[n_params ? n_params : 1];
+  void *arg_values[n_params ? n_params : 1];
+
+  if ((size_t)argc < n_params) {
+    fprintf(stderr,
+            "[VM:FFI] attempted to call \"%s\" via 'extern', but too few "
+            "arguments were "
+            "provided. got=%d need=%zu\n",
+            function.name, argc, n_params);
+    exit(1);
+  }
+
+  for (size_t i = 0; i < n_params; ++i) {
+    arg_types[i] = &function.parameters.data[i];
+    Value *v = &argv[i];
+    switch (v->type) {
+    case VALUE_INTEGER:
+      arg_values[i] = &v->integer;
+      break;
+    case VALUE_STRING:
+      arg_values[i] = &v->string;
+      break;
+    default:
+      fprintf(stderr, "[VM:FFI] unsupported argument type for extern call\n");
+      exit(1);
+    }
+  }
+
+  ffi_type *ffi_return_type = &function.return_type;
+
+  int int_buf = 0;
+  char *string_buf = NULL;
+  void *return_buf = NULL;
+
+  int return_type = function.original_return_type->tag;
+
+  if (return_type == TYPE_INT) {
+    return_buf = &int_buf;
+  } else if (return_type == TYPE_STRING) {
+    return_buf = &string_buf;
+  } else if (return_type == TYPE_VOID) {
+    return_buf = NULL;
+  }
+
+  int prep = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned)n_params,
+                          ffi_return_type, arg_types);
+  if (prep != FFI_OK) {
+    fprintf(stderr, "[VM:FFI] ffi_prep_cif failed: %d\n", prep);
+    exit(1);
+  }
+
+  ffi_call(&cif, function.ptr, return_buf, arg_values);
+
+  if (return_type == TYPE_INT) {
+    return (Value){.type = VALUE_INTEGER, .integer = int_buf};
+  } else if (return_type == TYPE_STRING) {
+    return (Value){.type = VALUE_STRING, .string = string_buf};
+  } else if (return_type == TYPE_VOID) {
+    return (Value){.type = VALUE_VOID};
+  }
+
+  fprintf(stderr, "[VM:FFI] no return type was specified\n");
+  exit(1);
 }

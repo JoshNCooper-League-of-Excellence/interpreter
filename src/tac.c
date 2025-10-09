@@ -13,7 +13,6 @@
 */
 
 unsigned add_constant(Module *m, Thir *thir) {
-
   Constant_Type type = CONST_INTEGER;
 
   if (thir->type->tag == TYPE_STRING) {
@@ -29,7 +28,6 @@ unsigned add_constant(Module *m, Thir *thir) {
   // We already have a constant that matches this one, re-use it.
   LIST_FOREACH(m->constants, constant) {
     if (strcmp(constant.value, value) == 0 && constant.type == type) {
-      printf("reusing constant: { type: %s, value: %s }\n", type == CONST_INTEGER ? "int" : "string", value);
       return __i;
     }
   }
@@ -107,7 +105,7 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
     assert(n->call.callee && "null callee while lowering");
 
     if (n->call.callee->thir->tag == THIR_EXTERN) {
-      Instr instr = {.op = OP_CALL_EXTERN, .a = dest, .b = 0, .c = nargs};
+      Instr instr = {.op = OP_CALL_EXTERN, .a = dest, .b = n->call.callee->thir->extern_function.index, .c = nargs};
       EMIT(&fn->code, instr);
     } else {
       int func_idx = (int)n->call.callee->index;

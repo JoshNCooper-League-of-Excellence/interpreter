@@ -4,7 +4,15 @@
 #include "string_builder.h"
 #include "tac.h"
 
+typedef struct {
+  int argc;
+  char **argv;
+} Cmd_Line_Args;
+
+extern Cmd_Line_Args COMMAND_LINE_ARGUMENTS;
+
 typedef enum {
+  VALUE_VOID, // this exists just for foreign functions that return void.
   VALUE_INTEGER,
   VALUE_STRING,
 } Value_Type;
@@ -34,4 +42,3 @@ void vm_execute(Module *module);
 Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc);
 
 #endif // #ifndef VM_H
-

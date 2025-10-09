@@ -20,8 +20,8 @@ Stack_Frame stack_frame_create(Function *fn, int ret_dest, int caller) {
   }
 
   frame.ip = 0;
-  frame.ret_dest = -1;
-  frame.caller = -1;
+  frame.ret_dest = ret_dest;
+  frame.caller = caller;
   return frame;
 }
 
@@ -235,7 +235,10 @@ void vm_execute(Module *m) {
     }
     case OP_RET: {
       int src = instr.a;
-      Value rv = call_stack[sp].locals[src];
+      Value rv = {.type = VALUE_VOID};
+      if (src >= 0) {
+        rv = call_stack[sp].locals[src];
+      }
       int caller_idx = call_stack[sp].caller;
       int ret_dest = call_stack[sp].ret_dest;
 
@@ -261,86 +264,6 @@ void vm_execute(Module *m) {
   if (call_stack[0].locals) {
     free(call_stack[0].locals);
   }
-}
-
-Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc) {
-  ffi_cif cif;
-
-  if (!function.ptr) {
-    fprintf(stderr, "[VM:FFI] error: function.ptr is (nil) for extern '%s'\n",
-            function.name);
-    exit(1);
-  }
-
-  size_t n_params = function.parameters.length;
-  ffi_type *arg_types[n_params ? n_params : 1];
-  void *arg_values[n_params ? n_params : 1];
-
-  int int_args[n_params ? n_params : 1];
-  char *str_args[n_params ? n_params : 1];
-
-  if ((size_t)argc < n_params) {
-    fprintf(stderr,
-            "[VM:FFI] attempted to call \"%s\" via 'extern', but too few "
-            "arguments were "
-            "provided. got=%d need=%zu\n",
-            function.name, argc, n_params);
-    exit(1);
-  }
-
-  for (size_t i = 0; i < n_params; ++i) {
-    arg_types[i] = &function.parameters.data[i];
-    Value v = argv[i];
-    switch (v.type) {
-    case VALUE_INTEGER:
-      int_args[i] = v.integer;
-      arg_values[i] = &int_args[i];
-      break;
-    case VALUE_STRING:
-      str_args[i] = v.string;
-      arg_values[i] = &str_args[i];
-      break;
-    default:
-      fprintf(stderr, "[VM:FFI] unsupported argument type for extern call\n");
-      exit(1);
-    }
-  }
-
-  ffi_type *ffi_return_type = &function.return_type;
-
-  int int_buf = 0;
-  char *string_buf = NULL;
-  void *return_buf = NULL;
-
-  int return_type = function.original_return_type->tag;
-
-  if (return_type == TYPE_INT) {
-    return_buf = &int_buf;
-  } else if (return_type == TYPE_STRING) {
-    return_buf = &string_buf;
-  } else if (return_type == TYPE_VOID) {
-    return_buf = NULL;
-  }
-
-  int prep = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned)n_params, ffi_return_type,
-                          arg_types);
-  if (prep != FFI_OK) {
-    fprintf(stderr, "[VM:FFI] ffi_prep_cif failed: %d\n", prep);
-    exit(1);
-  }
-
-  ffi_call(&cif, function.ptr, return_buf, arg_values);
-
-  if (return_type == TYPE_INT) {
-    return (Value){.type = VALUE_INTEGER, .integer = int_buf};
-  } else if (return_type == TYPE_STRING) {
-    return (Value){.type = VALUE_STRING, .string = string_buf};
-  } else if (return_type == TYPE_VOID) {
-    return (Value){};
-  }
-
-  fprintf(stderr, "[VM:FFI] no return type was specified\n");
-  exit(1);
 }
 
 void print_value(Value *value, String_Builder *sb) {

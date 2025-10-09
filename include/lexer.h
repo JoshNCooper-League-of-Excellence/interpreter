@@ -3,7 +3,7 @@
 
 #define _GNU_SOURCE
 #ifndef __USE_MISC
-  #define __USE_MISC
+#define __USE_MISC
 #endif
 
 #include "list.h"
@@ -95,10 +95,10 @@ typedef struct {
 
 extern const char *CURRENTLY_COMPILING_FILE_NAME;
 
-static inline char *lexer_span_to_string(const Span *span) {
+static inline char *lexer_span_to_string(Span span) {
   char *buffer = malloc(64);
-  snprintf(buffer, 64, "%s:%zu:%zu", CURRENTLY_COMPILING_FILE_NAME, span->line,
-           span->col);
+  snprintf(buffer, 64, "%s:%zu:%zu", CURRENTLY_COMPILING_FILE_NAME, span.line,
+           span.col);
   return buffer;
 }
 
@@ -203,7 +203,7 @@ static inline Token lexer_gettok(Lexer *lexer) {
         lexer->col++;
       }
       size_t len = lexer->pos - start;
-      
+
       struct {
         const char *kw;
         Token_Type type;

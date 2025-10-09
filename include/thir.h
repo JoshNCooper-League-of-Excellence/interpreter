@@ -30,7 +30,6 @@ typedef struct {
   Type *original_return_type;
 } Extern_Function;
 
-
 struct Thir;
 DEFINE_LIST(Extern_Function);
 extern Extern_Function_list CACHED_EXTERNS;

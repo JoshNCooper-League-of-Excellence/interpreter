@@ -21,8 +21,17 @@ Extern_Function_list CACHED_EXTERNS;
 #define LOG_TAC 4
 #define LOG_MAX 4
 
+
+Cmd_Line_Args COMMAND_LINE_ARGUMENTS;
+
 int main(int argc, char *argv[]) {
+  COMMAND_LINE_ARGUMENTS = (Cmd_Line_Args){
+    .argc = argc - 1,
+    .argv = argv + 1
+  };
+
   CACHED_EXTERNS = (Extern_Function_list){0};
+
   Context context = {0};
 
   context.string_type = type_alloc(&context);
@@ -44,7 +53,7 @@ int main(int argc, char *argv[]) {
   }
   const char *filename = argv[1];
 #else
-  const char *filename = "input.bi";
+  const char *filename = "main.b";
 #endif
   CURRENTLY_COMPILING_FILE_NAME = filename;
 
