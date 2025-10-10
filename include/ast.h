@@ -172,6 +172,7 @@ typedef enum {
   AST_AGGREGATE_INITIALIZER,
   AST_STRUCT,
   AST_MEMBER_ACCESS,
+  AST_IF,
 } Ast_Tag;
 
 typedef struct {
@@ -208,6 +209,12 @@ typedef struct Ast {
       const char *name;
       Ast_Struct_Member_list members;
     } $struct;
+
+    struct {
+      struct Ast *condition;
+      struct Ast *then_block;
+      struct Ast *else_block; // optional
+    } $if;
 
     struct {
       struct Ast *base;
@@ -285,10 +292,25 @@ static inline void print_indent(String_Builder *sb, int indent) {
     sb_append(sb, "  ");
   }
 }
-
 static const char *ast_tag_names[] = {
-    "ERROR", "PROGRAM", "LITERAL", "IDENTIFIER", "BLOCK", "FUNCTION",
-    "UNARY", "BINARY",  "RETURN",  "VARIABLE",   "CALL",  "EXTERN"};
+  "ERROR",
+  "PROGRAM",
+  "LITERAL",
+  "IDENTIFIER",
+  "BLOCK",
+  "FUNCTION",
+  "UNARY",
+  "BINARY",
+  "RETURN",
+  "VARIABLE",
+  "CALL",
+  "EXTERN",
+  "TYPE",
+  "AGGREGATE_INITIALIZER",
+  "STRUCT",
+  "MEMBER_ACCESS",
+  "IF"
+};
 
 static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   if (!node) {
@@ -301,6 +323,19 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   sb_append(sb, "\n");
 
   switch (node->tag) {
+  case AST_IF:
+    print_indent(sb, indent + 1);
+    sb_append(sb, "condition:\n");
+    print_ast_rec(node->$if.condition, sb, indent + 2);
+    print_indent(sb, indent + 1);
+    sb_append(sb, "then:\n");
+    print_ast_rec(node->$if.then_block, sb, indent + 2);
+    if (node->$if.else_block) {
+      print_indent(sb, indent + 1);
+      sb_append(sb, "else:\n");
+      print_ast_rec(node->$if.else_block, sb, indent + 2);
+    }
+    break;
   case AST_MEMBER_ACCESS:
     print_indent(sb, indent + 1);
     sb_append(sb, "base:\n");

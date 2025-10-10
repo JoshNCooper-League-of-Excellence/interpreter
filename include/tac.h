@@ -37,11 +37,15 @@ typedef enum {
   OP_LOGICAL_NOT,
   OP_BIT_NOT,
   OP_INDEX,
+
+  OP_JUMP_IF,
+  OP_JUMP,
+
 } Op_Code;
 
 typedef struct {
   Op_Code op;
-  size_t a, b, c;
+  signed long long a, b, c;
 } Instr;
 
 typedef struct {
@@ -100,7 +104,7 @@ typedef struct {
 void module_init(Module *m, Context *context);
 
 #define EMIT($instruction_buffer, $instruction)                                \
-  LIST_PTR_PUSH($instruction_buffer, $instruction);
+  LIST_PUSH($instruction_buffer, $instruction);
 
 #define MAKE_INSTR0(op) ((Instr){(op), 0, 0, 0})
 #define MAKE_INSTR1(op, a) ((Instr){(op), (a), 0, 0})
@@ -203,6 +207,12 @@ void module_init(Module *m, Context *context);
 
 #define EMIT_XOR(buf, dest, l, r)                                              \
   EMIT(buf, MAKE_INSTR3(OP_XOR, (dest), (l), (r)))
+
+#define EMIT_JUMP_IF(buf, cond, target) \
+  EMIT(buf, MAKE_INSTR2(OP_JUMP_IF, (cond), (target)))
+
+#define EMIT_JUMP(buf, target) \
+  EMIT(buf, MAKE_INSTR1(OP_JUMP, (target)))
 
 int lower_expression(Thir *n, Function *fn, Module *m);
 void lower_block(Thir *block, Function *fn, Module *m);

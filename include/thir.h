@@ -18,6 +18,7 @@ typedef enum {
   THIR_EXTERN,
   THIR_AGGREGATE_INITIALIZER,
   THIR_MEMBER_ACCESS,
+  THIR_IF,
 } Thir_Tag;
 
 #include "ffi.h"
@@ -47,6 +48,12 @@ typedef struct Thir {
   union {
     Thir_Ptr_list program;
     Thir_Ptr_list block;
+
+    struct {
+      struct Thir *condition;
+      struct Thir *then_block;
+      struct Thir *else_block;
+    } $if;
 
     struct {
       Thir_Ptr_list values;
@@ -93,7 +100,6 @@ typedef struct Thir {
     } unary;
 
     struct Thir *variable_initializer;
-
     struct Thir *return_value;
   };
 } Thir;
@@ -128,7 +134,8 @@ static const char *thir_tag_names[] = {
   "CALL",
   "EXTERN",
   "AGGREGATE_INITIALIZER",
-  "MEMBER_ACCESS"
+  "MEMBER_ACCESS",
+  "IF"
 };
 
 static inline void print_indent_ir(String_Builder *sb, int indent) {
@@ -148,6 +155,19 @@ static inline void print_ir_rec(Thir *node, String_Builder *sb, int indent) {
   sb_append(sb, "\n");
 
   switch (node->tag) {
+  case THIR_IF:
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "condition:\n");
+    print_ir_rec(node->$if.condition, sb, indent + 2);
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "then:\n");
+    print_ir_rec(node->$if.then_block, sb, indent + 2);
+    print_indent_ir(sb, indent + 1);
+    if (node->$if.else_block) {
+      sb_append(sb, "else:\n");
+      print_ir_rec(node->$if.else_block, sb, indent + 2);
+    }
+    break;
   case THIR_MEMBER_ACCESS:
     print_indent_ir(sb, indent + 1);
     sb_append(sb, "base:\n");

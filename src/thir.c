@@ -282,6 +282,24 @@ Thir *type_identifier(Ast *ast, Context *context) {
   return binding->thir;
 }
 
+Thir *type_if(Ast *ast, Context *context) {
+  Thir *condition = type_expression(ast->$if.condition, context);
+  Thir *then_block = type_block(ast->$if.then_block, context);
+  Thir *else_block = nullptr;
+  if (ast->$if.else_block) {
+    if (ast->$if.else_block->tag == AST_IF) {
+      else_block = type_if(ast->$if.else_block, context);
+    } else {
+      else_block = type_block(ast->$if.else_block, context);
+    }
+  }
+  Thir *thir = thir_alloc(context, THIR_IF, ast->span);
+  thir->$if.condition = condition;
+  thir->$if.else_block = else_block;
+  thir->$if.then_block = then_block;
+  return thir;
+}
+
 Thir *type_block(Ast *ast, Context *context) {
   Thir *block = thir_alloc(context, THIR_BLOCK, ast->span);
 
@@ -290,6 +308,9 @@ Thir *type_block(Ast *ast, Context *context) {
     switch (statement->tag) {
     case AST_ERROR:
       report_error(statement);
+    case AST_IF:
+      LIST_PUSH(statements, type_if(statement, context));
+      break;
     case AST_CALL:
       LIST_PUSH(statements, type_call(statement, context));
       break;

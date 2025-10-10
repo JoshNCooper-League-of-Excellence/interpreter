@@ -103,7 +103,12 @@ Ast *parse_block(Lexer *lexer, Context *context) {
       break;
     }
 
+    bool expect_semi = true;
     switch (peeked.type) {
+    case TOKEN_IF:
+      expect_semi = false;
+      LIST_PUSH(statements, OK(parse_if(lexer, context)));
+      break;
     case TOKEN_SEMI:
       lexer_eat(lexer);
       break;
@@ -134,8 +139,9 @@ Ast *parse_block(Lexer *lexer, Context *context) {
       EXPECT(-2);
       break;
     }
-
-    EXPECT(TOKEN_SEMI);
+    if (expect_semi) {
+      EXPECT(TOKEN_SEMI);
+    }
   }
 
   EXPECT(TOKEN_RCURLY);
@@ -184,6 +190,12 @@ Ast *parse_primary(Lexer *lexer, Context *context) {
   Token peeked = lexer_peek(lexer);
   BEGIN_SPAN(peeked);
   switch (peeked.type) {
+  case TOKEN_LPAREN: {
+    lexer_eat(lexer);
+    Ast *expression = OK(parse_expression(lexer, context));
+    EXPECT(TOKEN_RPAREN);
+    return expression;
+  }
   case TOKEN_TRUE:
   case TOKEN_FALSE: {
     lexer_eat(lexer);
@@ -281,8 +293,32 @@ Ast *parse_binary(Lexer *lexer, Context *context, Precedence precedence) {
   return left;
 }
 
+Ast *parse_if(Lexer *lexer, Context *context) {
+  BEGIN_SPAN(EXPECT(TOKEN_IF));
+  Ast *condition = OK(parse_expression(lexer, context));
+  Ast *then_block = OK(parse_block(lexer, context));
+
+  Ast *else_block = nullptr;
+  if (lexer_next(lexer) == TOKEN_ELSE) {
+    lexer_eat(lexer);
+    if (lexer_next(lexer) == TOKEN_IF) {
+      else_block = OK(parse_if(lexer, context));
+    } else {
+      else_block = OK(parse_block(lexer, context));
+    }
+  }
+
+  END_SPAN()
+  Ast *ast = ast_alloc(context, AST_IF, span);
+  ast->$if.condition = condition;
+  ast->$if.else_block = else_block;
+  ast->$if.then_block = then_block;
+  return ast;
+}
+
 Ast *parse_identifier(Lexer *lexer, Context *context) {
-  // The peeked is ALWAYS an identifier here, so the other lookaheads are beyond that.
+  // The peeked is ALWAYS an identifier here, so the other lookaheads are beyond
+  // that.
   Token two_ahead = lexer_lookahead(lexer, 1);
 
   // x int = ... variable declaration
@@ -293,7 +329,7 @@ Ast *parse_identifier(Lexer *lexer, Context *context) {
   // main :: ... functiond declaration
   if (two_ahead.type == TOKEN_COLON) {
     return parse_function(lexer, context);
-  } 
+  }
 
   return parse_expression(lexer, context);
 }

@@ -40,6 +40,9 @@ typedef enum {
   TOKEN_EXTERN,
   TOKEN_RETURN,
 
+  TOKEN_IF,
+  TOKEN_ELSE,
+
   TOKEN_PLUS,
   TOKEN_MINUS,
   TOKEN_SLASH,
@@ -295,7 +298,8 @@ static inline Token lexer_gettok(Lexer *lexer) {
       } keywords[] = {
           {"extern", TOKEN_EXTERN, 6}, {"true", TOKEN_TRUE, 4},
           {"false", TOKEN_FALSE, 5},   {"struct", TOKEN_STRUCT, 6},
-          {"return", TOKEN_RETURN, 6},
+          {"return", TOKEN_RETURN, 6}, {"if", TOKEN_IF, 2},
+          {"else", TOKEN_ELSE, 4}
       };
 
       for (size_t i = 0; i < sizeof(keywords) / sizeof(keywords[0]); ++i) {

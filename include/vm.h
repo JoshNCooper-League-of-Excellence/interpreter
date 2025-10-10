@@ -22,7 +22,7 @@ typedef struct Value {
   unsigned owner_uid;
   Value_Type type;
   union {
-    int integer;
+    signed long long integer;
     char *string;
     struct {
       struct Value *members;

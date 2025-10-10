@@ -18,6 +18,14 @@ main :: (args string) void {
   x += 100;
   v.x += 100;
   take_vec3(v);
-  printf("[in main]: %d, %d, %d\n", v.x, v.y, v.z); 
   value bool = 1 || 2;
+
+  if false { 
+    printf("[in main if]: %d, %d, %d\n", v.x, v.y, v.z);  
+  } else if true {
+    printf("[in main else if ]: %d, %d, %d\n", v.x, v.y, v.z);  
+  } else {
+    printf("[in main else]: %d, %d, %d\n", v.x, v.y, v.z);  
+  }
+
 }

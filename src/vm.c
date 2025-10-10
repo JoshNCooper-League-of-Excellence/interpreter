@@ -6,11 +6,15 @@
 #include <dlfcn.h>
 #include <ffi.h>
 
+// this is the integer type the entire VM runs on (data-wise)
+typedef signed long long integer;
+
 #define VM_ERRF(msg, ...)                                                      \
   fprintf(stderr, "[VM]: " msg "\n" __VA_OPT__(, ) __VA_ARGS__);               \
   exit(1);
 
-static inline Stack_Frame enter(Function *fn, int ret_dest, int caller) {
+static inline Stack_Frame enter(Function *fn, integer ret_dest,
+                                integer caller) {
   Stack_Frame frame;
   frame.fn = fn;
   // always allocate at least a byte, to simplify freeing for now
@@ -107,15 +111,15 @@ void vm_execute(Module *m) {
   }
 
   Stack_Frame call_stack[256];
-  for (int i = 0; i < 256; ++i) {
+  for (integer i = 0; i < 256; ++i) {
     Stack_Frame *frame = &call_stack[i];
     frame->uid = i;
   }
 
-  int sp = 0; // stack pointer (into call_stack)
+  integer sp = 0; // stack pointer (into call_stack)
 
   Value arg_stack[64];
-  int arg_p = 0;
+  integer arg_p = 0;
 
 #define ENTRY_POINT_CALLER -1
 
@@ -154,6 +158,8 @@ void vm_execute(Module *m) {
       [OP_LOGICAL_NOT] = &&L_LOGICAL_NOT,
       [OP_BIT_NOT] = &&L_BIT_NOT,
       [OP_INDEX] = &&L_INDEX,
+      [OP_JUMP] = &&L_JUMP,
+      [OP_JUMP_IF] = &&L_JUMP_IF,
   };
 
   goto L_FUNCTION_ENTRY;
@@ -162,114 +168,114 @@ L_FUNCTION_ENTRY:
   FETCH();
 
 L_ALLOCA: {
-  int dest = instr.a;
-  int ty_idx = instr.b;
+  integer dest = instr.a;
+  integer ty_idx = instr.b;
   if (ty_idx < 0 || (unsigned)ty_idx >= m->types.length) {
-    VM_ERRF("invalid type index %d", ty_idx);
+    VM_ERRF("invalid type index %lld", ty_idx);
   }
   sf->locals[dest] = default_value_of_type(m->types.data[ty_idx], sf->uid);
   FETCH();
 }
 
 L_MEMBER_LOAD: {
-  int dest = instr.a;
-  int struct_slot = instr.b;
-  int member_idx = instr.c;
+  integer dest = instr.a;
+  integer struct_slot = instr.b;
+  integer member_idx = instr.c;
   Value *struct_val = &sf->locals[struct_slot];
   if (struct_val->type != VALUE_STRUCT) {
-    VM_ERRF("OP_MEMBER_LOAD: value at slot %d is not a struct", struct_slot);
+    VM_ERRF("OP_MEMBER_LOAD: value at slot %lld is not a struct", struct_slot);
   }
   if (member_idx < 0 || (size_t)member_idx >= struct_val->$struct.length) {
-    VM_ERRF("OP_MEMBER_LOAD: invalid member index %d", member_idx);
+    VM_ERRF("OP_MEMBER_LOAD: invalid member index %lld", member_idx);
   }
   sf->locals[dest] = struct_val->$struct.members[member_idx];
   FETCH();
 }
 
 L_MEMBER_STORE: {
-  int struct_slot = instr.a;
-  int member_idx = instr.b;
-  int src = instr.c;
+  integer struct_slot = instr.a;
+  integer member_idx = instr.b;
+  integer src = instr.c;
   Value *struct_val = &sf->locals[struct_slot];
   if (struct_val->type != VALUE_STRUCT) {
-    VM_ERRF("OP_MEMBER_STORE: value at slot %d is not a struct", struct_slot);
+    VM_ERRF("OP_MEMBER_STORE: value at slot %lld is not a struct", struct_slot);
   }
   if (member_idx < 0 || (size_t)member_idx >= struct_val->$struct.length) {
-    VM_ERRF("OP_MEMBER_STORE: invalid member index %d", member_idx);
+    VM_ERRF("OP_MEMBER_STORE: invalid member index %lld", member_idx);
   }
   struct_val->$struct.members[member_idx] = sf->locals[src];
   FETCH();
 }
 
 L_CONST: {
-  int dest = instr.a;
-  int cidx = instr.b;
+  integer dest = instr.a;
+  integer cidx = instr.b;
   sf->locals[dest] = constants[cidx];
   FETCH();
 }
 
 L_LOAD: {
-  int dest = instr.a;
-  int slot = instr.b;
+  integer dest = instr.a;
+  integer slot = instr.b;
   sf->locals[dest] = sf->locals[slot];
   FETCH();
 }
 
 L_STORE: {
-  int slot = instr.a;
-  int src = instr.b;
+  integer slot = instr.a;
+  integer src = instr.b;
   sf->locals[slot] = sf->locals[src];
   FETCH();
 }
 
 L_ADD: {
-  int d = instr.a, l = instr.b, r = instr.c;
+  integer d = instr.a, l = instr.b, r = instr.c;
   sf->locals[d].integer = sf->locals[l].integer + sf->locals[r].integer;
   sf->locals[d].type = VALUE_INTEGER;
   FETCH();
 }
 
 L_SUB: {
-  int d = instr.a, l = instr.b, r = instr.c;
+  integer d = instr.a, l = instr.b, r = instr.c;
   sf->locals[d].integer = sf->locals[l].integer - sf->locals[r].integer;
   sf->locals[d].type = VALUE_INTEGER;
   FETCH();
 }
 
 L_MUL: {
-  int d = instr.a, l = instr.b, r = instr.c;
+  integer d = instr.a, l = instr.b, r = instr.c;
   sf->locals[d].integer = sf->locals[l].integer * sf->locals[r].integer;
   sf->locals[d].type = VALUE_INTEGER;
   FETCH();
 }
 
 L_DIV: {
-  int d = instr.a, l = instr.b, r = instr.c;
+  integer d = instr.a, l = instr.b, r = instr.c;
   sf->locals[d].integer = sf->locals[l].integer / sf->locals[r].integer;
   sf->locals[d].type = VALUE_INTEGER;
   FETCH();
 }
 
 L_PUSH: {
-  int src = instr.a;
+  integer src = instr.a;
   arg_stack[arg_p++] = sf->locals[src];
   FETCH();
 }
 
 L_CALL_EXTERN: {
-  int dest = instr.a;
-  int func_idx = instr.b;
-  int nargs = instr.c;
+  integer dest = instr.a;
+  integer func_idx = instr.b;
+  integer nargs = instr.c;
 
   if (func_idx < 0 || (unsigned)func_idx >= CACHED_EXTERNS.length) {
-    VM_ERRF("invalid extern index %d", func_idx);
+    VM_ERRF("invalid extern index %lld", func_idx);
   }
   Extern_Function callee = CACHED_EXTERNS.data[func_idx];
 
-  int base = arg_p - nargs;
+  integer base = arg_p - nargs;
   if (base < 0) {
     VM_ERRF(
-        "not enough arguments on arg stack for extern call (need=%d have=%d)",
+        "not enough arguments on arg stack for extern call (need=%lld have=%lld)",
         nargs, arg_p);
   }
 
@@ -281,12 +287,12 @@ L_CALL_EXTERN: {
 }
 
 L_CALL: {
-  int dest = instr.a;
-  int func_idx = instr.b;
-  int nargs = instr.c;
+  integer dest = instr.a;
+  integer func_idx = instr.b;
+  integer nargs = instr.c;
 
   if (func_idx < 0 || (unsigned)func_idx >= m->functions.length) {
-    VM_ERRF("invalid function index %d", func_idx);
+    VM_ERRF("invalid function index %lld", func_idx);
   }
   Function *callee = m->functions.data[func_idx];
 
@@ -294,15 +300,15 @@ L_CALL: {
     VM_ERRF("call stack overflow");
   }
 
-  int base = arg_p - nargs;
+  integer base = arg_p - nargs;
   if (base < 0) {
-    VM_ERRF("not enough arguments on arg stack for call (need=%d have=%d)",
+    VM_ERRF("not enough arguments on arg stack for call (need=%lld have=%lld)",
             nargs, arg_p);
   }
 
-  int new_sp = sp + 1;
+  integer new_sp = sp + 1;
   call_stack[new_sp] = enter(callee, dest, sp);
-  for (int i = 0; i < nargs; ++i) {
+  for (integer i = 0; i < nargs; ++i) {
     call_stack[new_sp].locals[i] = arg_stack[base + i];
   }
   arg_p = base; // pop args
@@ -313,13 +319,13 @@ L_CALL: {
 }
 
 L_RET: {
-  int src = instr.a;
+  integer src = instr.a;
   Value rv = {.type = VALUE_VOID};
   if (src >= 0) {
     rv = sf->locals[src];
   }
-  int caller_idx = sf->caller;
-  int ret_dest = sf->ret_dest;
+  integer caller_idx = sf->caller;
+  integer ret_dest = sf->ret_dest;
   leave(sf);
   if (caller_idx == ENTRY_POINT_CALLER) {
     goto L_EXIT;
@@ -338,8 +344,8 @@ L_RETURN_TO_CALLER: {
     goto L_EXIT;
   }
   Value rv = sf->locals[0];
-  int caller_idx = sf->caller;
-  int dest = sf->ret_dest;
+  integer caller_idx = sf->caller;
+  integer dest = sf->ret_dest;
   leave(sf);
   sp = caller_idx;
   sf = &call_stack[sp];
@@ -350,91 +356,91 @@ L_RETURN_TO_CALLER: {
 }
 
 L_NEGATE: {
-  int dest = instr.a, src = instr.b;
+  integer dest = instr.a, src = instr.b;
   sf->locals[dest].integer = -sf->locals[src].integer;
   sf->locals[dest].type = VALUE_INTEGER;
   FETCH();
 }
 
 L_LOGICAL_OR: {
-  int d = instr.a, l = instr.b, r = instr.c;
+  integer d = instr.a, l = instr.b, r = instr.c;
   sf->locals[d].integer = (sf->locals[l].integer || sf->locals[r].integer);
   sf->locals[d].type = VALUE_INTEGER;
   FETCH();
 }
 
 L_LOGICAL_AND: {
-  int d = instr.a, l = instr.b, r = instr.c;
+  integer d = instr.a, l = instr.b, r = instr.c;
   sf->locals[d].integer = (sf->locals[l].integer && sf->locals[r].integer);
   sf->locals[d].type = VALUE_INTEGER;
   FETCH();
 }
 
 L_SHIFT_LEFT: {
-  int d = instr.a, l = instr.b, r = instr.c;
+  integer d = instr.a, l = instr.b, r = instr.c;
   sf->locals[d].integer = (sf->locals[l].integer << sf->locals[r].integer);
   sf->locals[d].type = VALUE_INTEGER;
   FETCH();
 }
 
 L_SHIFT_RIGHT: {
-  int d = instr.a, l = instr.b, r = instr.c;
+  integer d = instr.a, l = instr.b, r = instr.c;
   sf->locals[d].integer = (sf->locals[l].integer >> sf->locals[r].integer);
   sf->locals[d].type = VALUE_INTEGER;
   FETCH();
 }
 
 L_XOR: {
-  int d = instr.a, l = instr.b, r = instr.c;
+  integer d = instr.a, l = instr.b, r = instr.c;
   sf->locals[d].integer = (sf->locals[l].integer ^ sf->locals[r].integer);
   sf->locals[d].type = VALUE_INTEGER;
   FETCH();
 }
 
 L_BIT_OR: {
-  int d = instr.a, l = instr.b, r = instr.c;
+  integer d = instr.a, l = instr.b, r = instr.c;
   sf->locals[d].integer = (sf->locals[l].integer | sf->locals[r].integer);
   sf->locals[d].type = VALUE_INTEGER;
   FETCH();
 }
 
 L_BIT_AND: {
-  int d = instr.a, l = instr.b, r = instr.c;
+  integer d = instr.a, l = instr.b, r = instr.c;
   sf->locals[d].integer = (sf->locals[l].integer & sf->locals[r].integer);
   sf->locals[d].type = VALUE_INTEGER;
   FETCH();
 }
 
 L_EQUALS: {
-  int d = instr.a, l = instr.b, r = instr.c;
+  integer d = instr.a, l = instr.b, r = instr.c;
   sf->locals[d].integer = (sf->locals[l].integer == sf->locals[r].integer);
   sf->locals[d].type = VALUE_INTEGER;
   FETCH();
 }
 
 L_LESS: {
-  int d = instr.a, l = instr.b, r = instr.c;
+  integer d = instr.a, l = instr.b, r = instr.c;
   sf->locals[d].integer = (sf->locals[l].integer < sf->locals[r].integer);
   sf->locals[d].type = VALUE_INTEGER;
   FETCH();
 }
 
 L_GREATER: {
-  int d = instr.a, l = instr.b, r = instr.c;
+  integer d = instr.a, l = instr.b, r = instr.c;
   sf->locals[d].integer = (sf->locals[l].integer > sf->locals[r].integer);
   sf->locals[d].type = VALUE_INTEGER;
   FETCH();
 }
 
 L_LOGICAL_NOT: {
-  int d = instr.a, s = instr.b;
+  integer d = instr.a, s = instr.b;
   sf->locals[d].integer = !sf->locals[s].integer;
   sf->locals[d].type = VALUE_INTEGER;
   FETCH();
 }
 
 L_BIT_NOT: {
-  int d = instr.a, s = instr.b;
+  integer d = instr.a, s = instr.b;
   sf->locals[d].integer = ~sf->locals[s].integer;
   sf->locals[d].type = VALUE_INTEGER;
   FETCH();
@@ -442,6 +448,21 @@ L_BIT_NOT: {
 
 L_INDEX:
   VM_ERRF("[...] index operations not implemented");
+
+L_JUMP_IF: {
+  integer cond = instr.a;
+  integer target = instr.b;
+  if (sf->locals[cond].integer) {
+    sf->ip += target;
+  }
+  FETCH();
+}
+
+L_JUMP: {
+  integer target = instr.a;
+  sf->ip += target;
+  FETCH();
+}
 
 L_EXIT:
   leave(&call_stack[0]);
@@ -528,7 +549,7 @@ void leave(Stack_Frame *frame) {
     return;
   }
 
-  for (int i = 0; i < frame->n_locals; ++i) {
+  for (integer i = 0; i < frame->n_locals; ++i) {
     Value *value = &frame->locals[i];
     value_free(value, frame->uid);
   }
@@ -566,14 +587,14 @@ Extern_Function get_ffi_function_from_thir(Thir *thir) {
     const char *name;
     void *handle;
   } open_libs[16] = {};
-  static int open_libs_count = 0;
+  static integer open_libs_count = 0;
 
   void *handle = NULL;
   void *symbol = NULL;
 
   for (const char **p = LIB_SEARCH_PATHS; *p != NULL; ++p) {
-    int found = 0;
-    for (int i = 0; i < open_libs_count; ++i) {
+    integer found = 0;
+    for (integer i = 0; i < open_libs_count; ++i) {
       if (strcmp(open_libs[i].name, *p) == 0) {
         handle = open_libs[i].handle;
         found = 1;
@@ -689,11 +710,11 @@ Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc) {
 
   ffi_type *ffi_return_type = &function.return_type;
 
-  int int_buf = 0;
+  integer int_buf = 0;
   char *string_buf = NULL;
   void *return_buf = NULL;
 
-  int return_type = function.original_return_type->tag;
+  integer return_type = function.original_return_type->tag;
 
   if (return_type == TYPE_INT) {
     return_buf = &int_buf;
@@ -703,10 +724,10 @@ Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc) {
     return_buf = NULL;
   }
 
-  int prep = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned)n_params,
-                          ffi_return_type, arg_types);
+  integer prep = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned)n_params,
+                              ffi_return_type, arg_types);
   if (prep != FFI_OK) {
-    fprintf(stderr, "[VM:FFI] ffi_prep_cif failed: %d\n", prep);
+    fprintf(stderr, "[VM:FFI] ffi_prep_cif failed: %lld\n", prep);
     exit(1);
   }
 

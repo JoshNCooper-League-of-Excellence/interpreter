@@ -95,7 +95,7 @@ int lower_member_rvalue(Thir *n, Function *fn, Module *m) {
   int obj;
   if (base->tag == THIR_VARIABLE) {
     obj = generate_temp(fn);
-    EMIT_LOAD(&fn->code, obj, (int)base->binding->index);
+    EMIT_LOAD(fn->code, obj, (int)base->binding->index);
   } else {
     // Non-variable base (e.g. call returning a struct)
     obj = lower_expression(base, fn, m);
@@ -104,7 +104,7 @@ int lower_member_rvalue(Thir *n, Function *fn, Module *m) {
   // Traverse from root to leaf: reverse the leaf_to_root order.
   for (int i = depth - 1; i >= 0; --i) {
     int tmp = generate_temp(fn);
-    EMIT_MEMBER_LOAD(&fn->code, tmp, obj, leaf_to_root[i]);
+    EMIT_MEMBER_LOAD(fn->code, tmp, obj, leaf_to_root[i]);
     obj = tmp;
   }
   return obj;
@@ -128,30 +128,30 @@ int lower_member_assignment(Thir *lhs, int rhs, Function *fn) {
 
   // Load the top-level struct value
   int obj0 = generate_temp(fn);
-  EMIT_LOAD(&fn->code, obj0, slot);
+  EMIT_LOAD(fn->code, obj0, slot);
 
   // Build containers down to the parent of the leaf
   int containers[33];
   containers[0] = obj0;
   for (int i = 0; i < depth - 1; ++i) {
     int tmp = generate_temp(fn);
-    EMIT_MEMBER_LOAD(&fn->code, tmp, containers[i], path[i]);
+    EMIT_MEMBER_LOAD(fn->code, tmp, containers[i], path[i]);
     containers[i + 1] = tmp;
   }
 
   // Write the rhs into the leaf field
-  EMIT_MEMBER_STORE(&fn->code,
+  EMIT_MEMBER_STORE(fn->code,
                     containers[depth - 1], // parent container
                     path[depth - 1],       // leaf index
                     rhs);
 
   // Write back up the chain
   for (int i = depth - 2; i >= 0; --i) {
-    EMIT_MEMBER_STORE(&fn->code, containers[i], path[i], containers[i + 1]);
+    EMIT_MEMBER_STORE(fn->code, containers[i], path[i], containers[i + 1]);
   }
 
   // Store updated top-level struct back to the variable slot
-  EMIT_STORE(&fn->code, slot, containers[0]);
+  EMIT_STORE(fn->code, slot, containers[0]);
 
   return rhs; // assignment expression result
 }
@@ -162,7 +162,7 @@ int lower_get_lvalue_value(Thir *lhs, Function *fn, Module *m) {
     return lower_member_rvalue(lhs, fn, m);
   case THIR_VARIABLE: {
     int tmp = generate_temp(fn);
-    EMIT_LOAD(&fn->code, tmp, (int)lhs->binding->index);
+    EMIT_LOAD(fn->code, tmp, (int)lhs->binding->index);
     return tmp;
   }
   default: {
@@ -182,7 +182,7 @@ void lower_set_lvalue_value(Thir *lhs, int value, Function *fn) {
     (void)lower_member_assignment(lhs, value, fn);
     return;
   case THIR_VARIABLE:
-    EMIT_STORE(&fn->code, (int)lhs->binding->index, value);
+    EMIT_STORE(fn->code, (int)lhs->binding->index, value);
     return;
   default: {
     char *msg;
@@ -219,23 +219,23 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
   }
   case THIR_AGGREGATE_INITIALIZER: {
     int dest = generate_temp(fn);
-    EMIT_ALLOCA(&fn->code, dest, n->type->index);
+    EMIT_ALLOCA(fn->code, dest, n->type->index);
     LIST_FOREACH(n->aggregate_initializer.values, value) {
       int v = lower_expression(value, fn, m);
-      EMIT_MEMBER_STORE(&fn->code, dest, __i, v);
+      EMIT_MEMBER_STORE(fn->code, dest, __i, v);
     }
     return dest;
   }
   case THIR_LITERAL: {
     int dest = generate_temp(fn);
     unsigned cidx = add_constant(m, n);
-    EMIT_CONST(&fn->code, dest, (int)cidx);
+    EMIT_CONST(fn->code, dest, (int)cidx);
     return dest;
   }
   case THIR_VARIABLE: {
     int dest = generate_temp(fn);
     size_t slot = n->binding->index;
-    EMIT_LOAD(&fn->code, dest, (int)slot);
+    EMIT_LOAD(fn->code, dest, (int)slot);
     return dest;
   }
   case THIR_BINARY: {
@@ -252,28 +252,28 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
 
       switch (n->binary.op) {
       case OPERATOR_PLUS_ASSIGN:
-        EMIT_ADD(&fn->code, res, lhs_val, rhs);
+        EMIT_ADD(fn->code, res, lhs_val, rhs);
         break;
       case OPERATOR_MINUS_ASSIGN:
-        EMIT_SUB(&fn->code, res, lhs_val, rhs);
+        EMIT_SUB(fn->code, res, lhs_val, rhs);
         break;
       case OPERATOR_STAR_ASSIGN:
-        EMIT_MUL(&fn->code, res, lhs_val, rhs);
+        EMIT_MUL(fn->code, res, lhs_val, rhs);
         break;
       case OPERATOR_SLASH_ASSIGN:
-        EMIT_DIV(&fn->code, res, lhs_val, rhs);
+        EMIT_DIV(fn->code, res, lhs_val, rhs);
         break;
       case OPERATOR_BIT_OR_ASSIGN:
-        EMIT_BIT_OR(&fn->code, res, lhs_val, rhs);
+        EMIT_BIT_OR(fn->code, res, lhs_val, rhs);
         break;
       case OPERATOR_BIT_AND_ASSIGN:
-        EMIT_BIT_AND(&fn->code, res, lhs_val, rhs);
+        EMIT_BIT_AND(fn->code, res, lhs_val, rhs);
         break;
       case OPERATOR_SHIFT_LEFT_ASSIGN:
-        EMIT_SHIFT_LEFT(&fn->code, res, lhs_val, rhs);
+        EMIT_SHIFT_LEFT(fn->code, res, lhs_val, rhs);
         break;
       case OPERATOR_SHIFT_RIGHT_ASSIGN:
-        EMIT_SHIFT_RIGHT(&fn->code, res, lhs_val, rhs);
+        EMIT_SHIFT_RIGHT(fn->code, res, lhs_val, rhs);
         break;
       default:
         fprintf(stderr, "lower_expression: unhandled compound op %d\n",
@@ -291,61 +291,61 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
 
     switch (n->binary.op) {
     case OPERATOR_ADD:
-      EMIT_ADD(&fn->code, dest, l, r);
+      EMIT_ADD(fn->code, dest, l, r);
       break;
     case OPERATOR_SUB:
-      EMIT_SUB(&fn->code, dest, l, r);
+      EMIT_SUB(fn->code, dest, l, r);
       break;
     case OPERATOR_MUL:
-      EMIT_MUL(&fn->code, dest, l, r);
+      EMIT_MUL(fn->code, dest, l, r);
       break;
     case OPERATOR_DIV:
-      EMIT_DIV(&fn->code, dest, l, r);
+      EMIT_DIV(fn->code, dest, l, r);
       break;
     case OPERATOR_LOGICAL_OR:
-      EMIT_LOGICAL_OR(&fn->code, dest, l, r);
+      EMIT_LOGICAL_OR(fn->code, dest, l, r);
       break;
     case OPERATOR_LOGICAL_AND:
-      EMIT_LOGICAL_AND(&fn->code, dest, l, r);
+      EMIT_LOGICAL_AND(fn->code, dest, l, r);
       break;
     case OPERATOR_BIT_OR:
-      EMIT_BIT_OR(&fn->code, dest, l, r);
+      EMIT_BIT_OR(fn->code, dest, l, r);
       break;
     case OPERATOR_BIT_AND:
-      EMIT_BIT_AND(&fn->code, dest, l, r);
+      EMIT_BIT_AND(fn->code, dest, l, r);
       break;
     case OPERATOR_XOR:
-      EMIT_XOR(&fn->code, dest, l, r);
+      EMIT_XOR(fn->code, dest, l, r);
       break;
     case OPERATOR_EQUALS:
-      EMIT_EQUALS(&fn->code, dest, l, r);
+      EMIT_EQUALS(fn->code, dest, l, r);
       break;
     case OPERATOR_NOT_EQUALS:
-      EMIT_NOT_EQUALS(&fn->code, dest, l, r);
+      EMIT_NOT_EQUALS(fn->code, dest, l, r);
       break;
     case OPERATOR_LESS:
-      EMIT_LESS(&fn->code, dest, l, r);
+      EMIT_LESS(fn->code, dest, l, r);
       break;
     case OPERATOR_GREATER:
-      EMIT_GREATER(&fn->code, dest, l, r);
+      EMIT_GREATER(fn->code, dest, l, r);
       break;
     case OPERATOR_LESS_EQUAL: {
       int tmp = generate_temp(fn);
-      EMIT_GREATER(&fn->code, tmp, l, r);
-      EMIT_LOGICAL_NOT(&fn->code, dest, tmp);
+      EMIT_GREATER(fn->code, tmp, l, r);
+      EMIT_LOGICAL_NOT(fn->code, dest, tmp);
       break;
     }
     case OPERATOR_GREATER_EQUAL: {
       int tmp = generate_temp(fn);
-      EMIT_LESS(&fn->code, tmp, l, r);
-      EMIT_LOGICAL_NOT(&fn->code, dest, tmp);
+      EMIT_LESS(fn->code, tmp, l, r);
+      EMIT_LOGICAL_NOT(fn->code, dest, tmp);
       break;
     }
     case OPERATOR_SHIFT_LEFT:
-      EMIT_SHIFT_LEFT(&fn->code, dest, l, r);
+      EMIT_SHIFT_LEFT(fn->code, dest, l, r);
       break;
     case OPERATOR_SHIFT_RIGHT:
-      EMIT_SHIFT_RIGHT(&fn->code, dest, l, r);
+      EMIT_SHIFT_RIGHT(fn->code, dest, l, r);
       break;
     default:
       fprintf(stderr, "lower_expression: unhandled binary op %d\n",
@@ -356,23 +356,22 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
     return dest;
   }
   case THIR_CALL: {
-
     int nargs = n->call.arguments.length;
 
     LIST_FOREACH(n->call.arguments, argument) {
       int dest = lower_expression(argument, fn, m);
-      EMIT_PUSH(&fn->code, dest);
+      EMIT_PUSH(fn->code, dest);
     }
 
     int dest = generate_temp(fn);
     assert(n->call.callee && "null callee while lowering");
 
     if (n->call.callee->thir->tag == THIR_EXTERN) {
-      EMIT_CALL_EXTERN(&fn->code, dest,
+      EMIT_CALL_EXTERN(fn->code, dest,
                        n->call.callee->thir->extern_function.index, nargs);
     } else {
       int func_idx = (int)n->call.callee->index;
-      EMIT_CALL(&fn->code, dest, func_idx, nargs);
+      EMIT_CALL(fn->code, dest, func_idx, nargs);
     }
     return dest;
   }
@@ -380,29 +379,77 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
     int v = lower_expression(n->unary.operand, fn, m);
     int dest = generate_temp(fn);
     // We don't even have unary operators defined so nothing to do here
-    EMIT_ADD(&fn->code, dest, v, 0);
+    EMIT_ADD(fn->code, dest, v, 0);
     return dest;
   }
   default:
-    fprintf(stderr, "lower_expr: unhandled THIR tag %d\n", n->tag);
+    fprintf(stderr, "lower_expr: unhandled expression THIR tag %d\n", n->tag);
     exit(1);
   }
+}
+
+// Written by chatgpt cause im too stupid to do this
+void lower_if(Thir *the_if, Function *fn, Module *m) {
+  int cond = lower_expression(the_if->$if.condition, fn, m);
+
+  // No else: need a guard jump to skip the then-block when cond is false.
+  if (!the_if->$if.else_block) {
+    int jif_idx = (int)fn->code.length;
+    EMIT_JUMP_IF(fn->code, cond, 0); // jump to then_start if true
+
+    int jmp_end_idx = (int)fn->code.length;
+    EMIT_JUMP(fn->code, 0); // fall-through (false) jumps to end
+
+    int then_start = (int)fn->code.length;
+    fn->code.data[jif_idx].b = then_start - (jif_idx + 1); // patch to then
+
+    lower_block(the_if->$if.then_block, fn, m);
+
+    int end_ip = (int)fn->code.length;
+    fn->code.data[jmp_end_idx].a = end_ip - (jmp_end_idx + 1); // patch to end
+    return;
+  }
+
+  // With else:
+  //   JUMP_IF cond -> then_start
+  //   else...
+  //   JUMP -> end
+  //   then_start:
+  //     then...
+  //   end:
+  int jif_idx = (int)fn->code.length;
+  EMIT_JUMP_IF(fn->code, cond, 0); // patch to then-start
+
+  if (the_if->$if.else_block->tag == THIR_IF) {
+    lower_if(the_if->$if.else_block, fn, m);
+  } else {
+    lower_block(the_if->$if.else_block, fn, m);
+  }
+
+  int jmp_end_idx = (int)fn->code.length;
+  EMIT_JUMP(fn->code, 0); // patch to end
+
+  int then_start = (int)fn->code.length;
+  fn->code.data[jif_idx].b = then_start - (jif_idx + 1); // to then
+
+  lower_block(the_if->$if.then_block, fn, m);
+
+  int end_ip = (int)fn->code.length;
+  fn->code.data[jmp_end_idx].a = end_ip - (jmp_end_idx + 1); // to end
 }
 
 void lower_block(Thir *block, Function *fn, Module *m) {
   LIST_FOREACH(block->block, stmt) {
     switch (stmt->tag) {
-    case THIR_BINARY: {
-      // dot expressions assignment, ignored result.
-      lower_expression(stmt, fn, m);
-      break;
-    }
+    case THIR_IF: {
+      lower_if(stmt, fn, m);
+    } break;
     case THIR_RETURN: {
       if (stmt->return_value) {
         int tmp = lower_expression(stmt->return_value, fn, m);
-        EMIT_RET(&fn->code, tmp);
+        EMIT_RET(fn->code, tmp);
       } else {
-        EMIT_RET(&fn->code, -1);
+        EMIT_RET(fn->code, -1);
       }
       break;
     }
@@ -410,9 +457,10 @@ void lower_block(Thir *block, Function *fn, Module *m) {
       int slot = (int)fn->n_locals++;
       stmt->binding->index = (size_t)slot;
       int src = lower_expression(stmt->variable_initializer, fn, m);
-      EMIT_STORE(&fn->code, slot, src);
+      EMIT_STORE(fn->code, slot, src);
       break;
     }
+    case THIR_BINARY:
     case THIR_CALL:
     case THIR_LITERAL:
       lower_expression(stmt, fn, m);
@@ -452,7 +500,7 @@ void lower_function(Thir *fnode, Module *m) {
 
   // ensure we always return
   if (fn->code.length == 0 || fn->code.data[fn->code.length - 1].op != OP_RET) {
-    EMIT_RET(&fn->code, 0);
+    EMIT_RET(fn->code, 0);
   }
 
   push_function(m, fn);

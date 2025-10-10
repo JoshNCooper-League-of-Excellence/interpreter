@@ -40,6 +40,7 @@ Ast *parse_aggregate_initializer(Lexer *lexer, Context *context);
 
 Ast *parse_extern(Lexer *lexer, Context *context);
 Ast *parse_identifier(Lexer *lexer, Context *context);
+Ast *parse_if(Lexer *lexer, Context *context);
 Ast *parse_struct(Lexer *lexer, Context *context);
 Ast *parse_function(Lexer *lexer, Context *context);
 Ast *parse_block(Lexer *lexer, Context *context);
