@@ -3,6 +3,7 @@
 #include "binding.h"
 #include "lexer.h"
 #include "list.h"
+#include "type.h"
 #include <limits.h>
 
 void print_ast_function_header(Ast *function) {
@@ -352,6 +353,20 @@ Ast *parse_type(Lexer *lexer, Context *context) {
   Token name = EXPECT(TOKEN_IDENTIFIER);
   Ast *ast = ast_alloc(context, AST_TYPE, name.span);
   ast->type.path = name.value;
+
+  while (true) {
+    if (lexer_next(lexer) == TOKEN_STAR) {
+      lexer_eat(lexer);
+      LIST_PUSH(ast->type.extensions, TYPE_EXT_POINTER);
+    } else if (lexer_next(lexer) == TOKEN_LBRACKET) {
+      lexer_eat(lexer);
+      EXPECT(TOKEN_RBRACKET);
+      LIST_PUSH(ast->type.extensions, TYPE_EXT_ARRAY);
+    } else {
+      break;
+    }
+  }
+
   return ast;
 }
 
@@ -377,11 +392,14 @@ bool parse_function_header(Lexer *lexer, Context *context, const char **name,
     }
 
     Token one_ahead = lexer_lookahead(lexer, 1);
+
     // Parse a type, no name for parameter.
     if (lexer_next(lexer) != TOKEN_IDENTIFIER ||
-        one_ahead.type == TOKEN_COMMA || one_ahead.type == TOKEN_RPAREN) {
+        one_ahead.type == TOKEN_COMMA || one_ahead.type == TOKEN_RPAREN ||
+        one_ahead.type == TOKEN_LBRACKET || one_ahead.type == TOKEN_STAR) {
       Parameter parameter = {.type = OK(parse_type(lexer, context)),
                              .nameless = true};
+
       LIST_PTR_PUSH(parameters, parameter);
     } else { // Parse $name $Type pair.
       Token param_name = EXPECT(TOKEN_IDENTIFIER);
@@ -564,7 +582,7 @@ Operator parse_operator(Lexer *lexer, Expression_Type expr_type) {
     case TOKEN_BIT_AND:
       lexer_eat(lexer);
       return OPERATOR_ADDRESS_OF;
-    case TOKEN_MUL:
+    case TOKEN_STAR:
       lexer_eat(lexer);
       return OPERATOR_DEREFERENCE;
     case TOKEN_LOGICAL_NOT:
@@ -683,7 +701,7 @@ Operator parse_operator(Lexer *lexer, Expression_Type expr_type) {
       lexer_eat(lexer);
       return OPERATOR_SUB;
 
-    case TOKEN_MUL:
+    case TOKEN_STAR:
       if (next.type == TOKEN_ASSIGN) {
         lexer_eat(lexer);
         lexer_eat(lexer);

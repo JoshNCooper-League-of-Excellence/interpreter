@@ -94,14 +94,23 @@ void context_initialize(Context *context) {
   Type *string_type = type_alloc(context);
   context->string_type = string_type;
 
-  string_type->name = "string";
-  string_type->tag = TYPE_STRING;
-
   Type *integer_type = type_alloc(context);
   context->integer_type = integer_type;
 
   integer_type->name = "int";
   integer_type->tag = TYPE_INT;
+
+  Type *u8_type = type_alloc(context);
+  context->byte_type = u8_type;
+  u8_type->name = "byte";
+  u8_type->tag = TYPE_BYTE;
+
+
+  Type *u8_ptr_type = type_alloc(context);
+  context->string_type = u8_ptr_type;
+  u8_ptr_type->name = "byte";
+  LIST_PUSH(u8_ptr_type->extensions, TYPE_EXT_POINTER);
+  u8_ptr_type->tag = TYPE_BYTE;
 
   Type *void_type = type_alloc(context);
   context->void_type = void_type;

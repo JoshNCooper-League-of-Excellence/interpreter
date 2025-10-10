@@ -6,31 +6,80 @@
 #include "thir.h"
 #include "type.h"
 
-/* Notes:
-   - This lowering uses binding->index for slots and fn->n_locals to allocate
-   temps.
-
-   - Keep bindings' index assignment consistent between typing and lowering or
-     assign all per-function binding indices in lower_function.
-*/
+/**
+ * TAC quick reference (for VM/compiler implementers)
+ *
+ * Value model
+ * - Integers: signed 64-bit ("integer"). Booleans are integers 0/1.
+ * - Strings: C strings (char*). String constants are unescaped at load time.
+ * - Structs: fixed-length aggregates; member indices are 0-based.
+ *
+ * Execution model
+ * - Each function executes with a locals array: slots [0..param_count-1] are
+ *   parameters, additional slots are temporaries/locals allocated sequentially.
+ * - Instructions are three-address with operands a, b, c. Unless stated,
+ *   binary ops follow: dest=a, left=b, right=c.
+ * - Control flow uses relative jumps measured from the NEXT instruction
+ *   (i.e., target_ip = ip + offset).
+ *
+ * Constants
+ * - Module-wide pool. CONST: a=dest, b=constIndex.
+ *
+ * Memory/locals
+ * - ALLOCA: a=dest, b=typeIndex → dest receives default value of type.
+ * - LOAD:   a=dest, b=slot.
+ * - STORE:  a=slot, b=src.
+ * - MEMBER_LOAD:  a=dest, b=objSlot, c=memberIndex.
+ * - MEMBER_STORE: a=objSlot, b=memberIndex, c=src.
+ *
+ * Calls
+ * - PUSH: a=src pushes an argument; arguments are pushed left-to-right.
+ * - CALL: a=dest, b=functionIndex, c=nargs.
+ *         Callee receives args in locals[0..nargs-1]; return goes to dest.
+ * - CALL_EXTERN: a=dest, b=externIndex, c=nargs; same calling convention.
+ * - RET: a=srcTemp or -1 for void.
+ *
+ * Arithmetic and logic (all integer semantics)
+ * - ADD/SUB/MUL/DIV/MODULO/SHIFT_LEFT/SHIFT_RIGHT/BIT_AND/BIT_OR/XOR.
+ * - EQUALS/NOT_EQUALS/LESS/GREATER produce 0/1.
+ * - LOGICAL_OR/LOGICAL_AND: truthy if nonzero. LOGICAL_NOT: 1 if zero else 0.
+ * - NEGATE: arithmetic negate. BIT_NOT: bitwise not.
+ *
+ * Control flow
+ * - JUMP: a=relativeOffset.
+ * - JUMP_IF: a=cond, b=relativeOffset (taken if cond != 0).
+ *
+ * Errors (VM-defined)
+ * - Division or modulo by zero is a runtime error.
+ * - Out-of-bounds member access and invalid indices are runtime errors.
+ */
 
 unsigned add_constant(Module *m, Thir *thir) {
   Constant_Type type = CONST_TYPE_INT;
 
-  bool is_bool =
-      thir->type->tag == TYPE_BOOL; // convert "true" and "false" to 1 and 0
+  // convert "true" and "false" to 1 and 0
+  bool is_bool = thir->type->tag == TYPE_BOOL;
+
   switch (thir->type->tag) {
   case TYPE_INT:
     type = CONST_TYPE_INT;
     break;
-  case TYPE_STRING:
-    type = CONST_TYPE_STRING;
+  case TYPE_BYTE:
+    if (type_is_pointer_of_depth(thir->type, 1)) {
+      type = CONST_TYPE_STRING;
+    } else {
+      goto L_FAILURE;
+    }
     break;
   case TYPE_BOOL:
     type = CONST_TYPE_INT;
     break;
-  default:
+  L_FAILURE:
+  case TYPE_STRUCT:
+  case TYPE_VOID:
+  case TYPE_FUNCTION:
     assert(false && "[TAC]: invalid constant type, expected 'int' or 'string'");
+    break;
   }
 
   const char *value = thir->literal.value;
@@ -167,7 +216,7 @@ int lower_get_lvalue_value(Thir *lhs, Function *fn, Module *m) {
   }
   default: {
     fprintf(stderr, "lower_get_lvalue_value: unsupported lvalue tag %d at %s",
-             lhs->tag, lexer_span_to_string(lhs->span));
+            lhs->tag, lexer_span_to_string(lhs->span));
     exit(EXIT_FAILURE);
   }
   }
@@ -183,7 +232,7 @@ void lower_set_lvalue_value(Thir *lhs, int value, Function *fn) {
     return;
   default: {
     fprintf(stderr, "lower_set_lvalue_value: unsupported lvalue tag %d at %s",
-             lhs->tag, lexer_span_to_string(lhs->span));
+            lhs->tag, lexer_span_to_string(lhs->span));
     exit(EXIT_FAILURE);
   }
   }
@@ -197,7 +246,7 @@ int lower_lvalue_slot(Thir *n) {
     return (int)n->binding->index;
   default:
     fprintf(stderr, "lower_lvalue: unsupported lvalue tag %d at %s", n->tag,
-             lexer_span_to_string(n->span));
+            lexer_span_to_string(n->span));
     exit(EXIT_FAILURE);
   }
 }
@@ -281,7 +330,7 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
     int dest = generate_temp(fn);
 
     switch (n->binary.op) {
-    case OPERATOR_MODULO: 
+    case OPERATOR_MODULO:
       EMIT_MODULO(fn->code, dest, l, r);
       break;
     case OPERATOR_ADD:
@@ -517,8 +566,9 @@ void lower_program(Thir *program, Module *m) {
     }
   }
 }
-
-void print_instr(Instr *i, String_Builder *sb) {
+void print_instr(Instr *i, String_Builder *sb, int indent) {
+  for (int j = 0; j < indent; ++j)
+    sb_append(sb, "  ");
   switch (i->op) {
   case OP_ALLOCA:
     sb_appendf(sb, "ALLOCA t%d, type=%d", i->a, i->b);
@@ -536,10 +586,10 @@ void print_instr(Instr *i, String_Builder *sb) {
     sb_appendf(sb, "CONST t%d, c%d", i->a, i->b);
     break;
   case OP_LOAD:
-    sb_appendf(sb, "LOAD t%d, slot%d", i->a, i->b);
+    sb_appendf(sb, "LOAD t%d, t%d", i->a, i->b);
     break;
   case OP_STORE:
-    sb_appendf(sb, "STORE slot%d, t%d", i->a, i->b);
+    sb_appendf(sb, "STORE t%d, t%d", i->a, i->b);
     break;
   case OP_ADD:
     sb_appendf(sb, "ADD t%d, t%d, t%d", i->a, i->b, i->c);
@@ -569,32 +619,40 @@ void print_instr(Instr *i, String_Builder *sb) {
 }
 
 void print_module(Module *m, String_Builder *sb) {
-
   sb_append(sb, "TYPES:\n");
   for (size_t i = 0; i < m->types.length; ++i) {
     Type *type = m->types.data[i];
     if (type->tag == TYPE_STRUCT) {
       Struct_Type *struct_type = (Struct_Type *)type;
-      sb_appendf(sb, "\t[%zu]: struct %s {\n", i, type->name);
+      sb_appendf(sb, "  [%zu]: struct %s {\n", i, type->name);
       LIST_FOREACH(struct_type->members, member) {
-        sb_appendf(sb, "\t\t[%zu]: %s\n", __i, member.type->name);
+        sb_append(sb, "         ");
+        sb_appendf(sb, "[%zu]: %s\n", __i, member.type->name);
       }
-      sb_append(sb, "\t     }\n");
+      sb_append(sb, "       }\n");
     }
   }
 
   sb_append(sb, "CONSTANTS:\n");
   LIST_FOREACH(m->constants, constant) {
-    sb_appendf(sb, "\t[%d]: { type: %s, value: \"%s\" }\n", __i,
-               constant_type_to_string(constant.type), constant.value);
+    sb_append(sb, "  ");
+    switch (constant.type) {
+    case CONST_TYPE_STRING:
+      sb_appendf(sb, "[%d]: { type: %s, value: \"%s\\0\" }\n", __i,
+                 constant_type_to_string(constant.type), constant.value);
+      break;
+    case CONST_TYPE_INT:
+      sb_appendf(sb, "[%d]: { type: %s, value: %s }\n", __i,
+                 constant_type_to_string(constant.type), constant.value);
+      break;
+    }
   }
 
   sb_append(sb, "FUNCTIONS:\n");
   LIST_FOREACH(m->functions, function) {
     sb_appendf(sb, "  %s:\n", function->name);
     for (unsigned i = 0; i < function->code.length; ++i) {
-      sb_append(sb, "\t");
-      print_instr(&function->code.data[i], sb);
+      print_instr(&function->code.data[i], sb, 2);
       sb_append(sb, "\n");
     }
   }

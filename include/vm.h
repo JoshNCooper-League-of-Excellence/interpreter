@@ -14,21 +14,28 @@ extern Cmd_Line_Args COMMAND_LINE_ARGUMENTS;
 typedef enum {
   VALUE_VOID, // this exists just for foreign functions that return void.
   VALUE_INTEGER,
-  VALUE_STRING,
+  VALUE_POINTER,
   VALUE_STRUCT,
 } Value_Type;
 
 typedef struct Value {
   unsigned owner_uid;
-  Value_Type type;
+  Value_Type tag;
   union {
     signed long long integer;
-    char *string;
     struct {
       struct Value *members;
       // this is num members
       unsigned length;
     } $struct;
+    struct { // this is used for both pointers and arrays.
+      void *elements;
+      enum {
+        POINTEE_VALUE,
+        POINTEE_RAW,
+      } pointee;
+      unsigned length;
+    } pointer;
   };
 } Value;
 

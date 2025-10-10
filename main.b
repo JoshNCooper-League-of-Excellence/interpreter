@@ -1,7 +1,23 @@
-extern puts :: (string) int;
+extern puts :: (byte*) int;
 
-main :: (args string) void {
+extern strlen :: (byte*) int;
+
+extern malloc :: (int) void*;
+
+struct string {
+  data byte*,
+  length int
+}
+
+str :: (data byte*) string {
+  return { data, strlen(data) };
+}
+
+main :: () void {
   x int = 0;
-  v int = x % 0;
-  puts("hello, world!");
+  s string = str("Hello, World!");
+
+  if s.length > 12 {
+    puts(s.data);
+  }
 }

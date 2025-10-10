@@ -7,7 +7,7 @@
       "program": "${workspaceFolder}/bin/debug/bindings",
       "args": [
         "main.b",
-        "-log=none",
+        "-o=main.ir"
       ],
       "cwd": "${workspaceFolder}"
     }

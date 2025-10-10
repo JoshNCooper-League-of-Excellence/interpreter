@@ -46,7 +46,7 @@ typedef enum {
   TOKEN_PLUS,
   TOKEN_MINUS,
   TOKEN_SLASH,
-  TOKEN_MUL,
+  TOKEN_STAR,
   TOKEN_ASSIGN,
   TOKEN_XOR,
 
@@ -142,7 +142,7 @@ static inline const char *token_type_to_string(Token_Type type) {
     return "MINUS";
   case TOKEN_SLASH:
     return "SLASH";
-  case TOKEN_MUL:
+  case TOKEN_STAR:
     return "STAR";
   case TOKEN_ASSIGN:
     return "ASSIGN";
@@ -418,7 +418,7 @@ static inline Token lexer_gettok(Lexer *lexer) {
         type = TOKEN_XOR;
         break;
       case '*':
-        type = TOKEN_MUL;
+        type = TOKEN_STAR;
         break;
       case '.':
         type = TOKEN_DOT;
@@ -540,7 +540,7 @@ static inline bool token_is_operator(Token_Type type) {
   case TOKEN_LPAREN:
   case TOKEN_PLUS:
   case TOKEN_MINUS:
-  case TOKEN_MUL:
+  case TOKEN_STAR:
   case TOKEN_SLASH:
   case TOKEN_XOR:
   case TOKEN_ASSIGN:

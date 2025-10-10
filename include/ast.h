@@ -4,6 +4,7 @@
 #include "binding.h"
 #include "lexer.h"
 #include "list.h"
+#include "type.h"
 #include <stddef.h>
 
 typedef enum {
@@ -198,6 +199,7 @@ typedef struct {
 
 DEFINE_LIST(Ast_Struct_Member)
 
+
 typedef struct Ast {
   Binding *binding;
   Span span;
@@ -231,7 +233,7 @@ typedef struct Ast {
 
     struct {
       const char *path;
-      // Type_Extension_list extensions;
+      Type_Extension_list extensions;
     } type;
 
     struct {
@@ -294,25 +296,15 @@ static inline void print_indent(String_Builder *sb, int indent) {
     sb_append(sb, "  ");
   }
 }
-static const char *ast_tag_names[] = {
-  "ERROR",
-  "PROGRAM",
-  "LITERAL",
-  "IDENTIFIER",
-  "BLOCK",
-  "FUNCTION",
-  "UNARY",
-  "BINARY",
-  "RETURN",
-  "VARIABLE",
-  "CALL",
-  "EXTERN",
-  "TYPE",
-  "AGGREGATE_INITIALIZER",
-  "STRUCT",
-  "MEMBER_ACCESS",
-  "IF"
-};
+static const char *ast_tag_names[] = {"ERROR",   "PROGRAM",
+                                      "LITERAL", "IDENTIFIER",
+                                      "BLOCK",   "FUNCTION",
+                                      "UNARY",   "BINARY",
+                                      "RETURN",  "VARIABLE",
+                                      "CALL",    "EXTERN",
+                                      "TYPE",    "AGGREGATE_INITIALIZER",
+                                      "STRUCT",  "MEMBER_ACCESS",
+                                      "IF"};
 
 static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   if (!node) {

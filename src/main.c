@@ -128,16 +128,16 @@ int main(int argc, char *argv[]) {
     LIST_FOREACH(context.bindings, binding) {
       printf("binding {\n");
       if (binding->name) {
-        printf("\tname: '%s'\n", binding->name);
+        printf("    name: '%s'\n", binding->name);
       }
       if (binding->ast) {
-        printf("\tAst: %p\n", binding->ast);
+        printf("    Ast: %p\n", binding->ast);
       }
       if (binding->thir) {
-        printf("\tThir: %p\n", binding->thir);
+        printf("    Thir: %p\n", binding->thir);
       }
       if (binding->type) {
-        printf("\ttype: %p aka %s\n", binding->type, binding->type->name);
+        printf("    type: %p aka %s\n", binding->type, binding->type->name);
       }
       printf("}\n");
     }

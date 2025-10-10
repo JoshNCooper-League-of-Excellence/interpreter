@@ -63,7 +63,7 @@ typedef enum {
 static inline const char *constant_type_to_string(Constant_Type type) {
   switch (type) {
   case CONST_TYPE_STRING:
-    return "string";
+    return "u8*";
   case CONST_TYPE_INT:
     return "int";
   }

@@ -1,66 +1,37 @@
 TYPES:
-	[6]: struct Vec3 {
-		[0]: int
-		[1]: int
-		[2]: int
-	     }
+  [8]: struct string {
+         [0]: byte
+         [1]: int
+       }
 CONSTANTS:
-	[0]: { type: string, value: "[in take_vec3]: %d, %d, %d\n" }
-	[1]: { type: int, value: "0" }
-	[2]: { type: int, value: "100" }
-	[3]: { type: string, value: "[in main]: %d, %d, %d\n" }
+  [0]: { type: int, value: 0 }
+  [1]: { type: u8*, value: "Hello, World!\0" }
+  [2]: { type: int, value: 12 }
 FUNCTIONS:
-  take_vec3:
-	CONST t1, c0
-	ARG i=1, src=t0
-	LOAD t2, slot0
-	MEMBER_LOAD t3, obj=t2, idx=0
-	ARG i=3, src=t0
-	LOAD t4, slot0
-	MEMBER_LOAD t5, obj=t4, idx=1
-	ARG i=5, src=t0
-	LOAD t6, slot0
-	MEMBER_LOAD t7, obj=t6, idx=2
-	ARG i=7, src=t0
-	CALL_EXTERN t8, ext0, nargs=4
-	RET t0
+  str:
+    ALLOCA t1, type=8
+    LOAD t2, t0
+    MEMBER_STORE obj=t1, idx=0, src=t2
+    LOAD t3, t0
+    ARG i=3, src=t0
+    CALL_EXTERN t4, ext1, nargs=1
+    MEMBER_STORE obj=t1, idx=1, src=t4
+    RET t1
   main:
-	ALLOCA t2, type=6
-	CONST t3, c1
-	MEMBER_STORE obj=t2, idx=0, src=t3
-	CONST t4, c1
-	MEMBER_STORE obj=t2, idx=1, src=t4
-	CONST t5, c1
-	MEMBER_STORE obj=t2, idx=2, src=t5
-	STORE slot1, t2
-	CONST t7, c1
-	STORE slot6, t7
-	LOAD t8, slot6
-	CONST t9, c2
-	ADD t10, t8, t9
-	STORE slot6, t10
-	LOAD t11, slot1
-	MEMBER_LOAD t12, obj=t11, idx=0
-	CONST t13, c2
-	ADD t14, t12, t13
-	LOAD t15, slot1
-	MEMBER_STORE obj=t15, idx=0, src=t14
-	STORE slot1, t15
-	LOAD t16, slot1
-	ARG i=16, src=t0
-	CALL t17, fn0, nargs=1
-	CONST t18, c3
-	ARG i=18, src=t0
-	LOAD t19, slot1
-	MEMBER_LOAD t20, obj=t19, idx=0
-	ARG i=20, src=t0
-	LOAD t21, slot1
-	MEMBER_LOAD t22, obj=t21, idx=1
-	ARG i=22, src=t0
-	LOAD t23, slot1
-	MEMBER_LOAD t24, obj=t23, idx=2
-	ARG i=24, src=t0
-	CALL_EXTERN t25, ext0, nargs=4
-	CONST t27, c1
-	STORE slot26, t27
-	RET t0
+    CONST t1, c0
+    STORE t0, t1
+    CONST t3, c1
+    ARG i=3, src=t0
+    CALL t4, fn0, nargs=1
+    STORE t2, t4
+    LOAD t5, t2
+    MEMBER_LOAD t6, obj=t5, idx=1
+    CONST t7, c2
+    UNKNOWN_OP 25
+    UNKNOWN_OP 30
+    UNKNOWN_OP 31
+    LOAD t9, t2
+    MEMBER_LOAD t10, obj=t9, idx=0
+    ARG i=10, src=t0
+    CALL_EXTERN t11, ext0, nargs=1
+    RET t0

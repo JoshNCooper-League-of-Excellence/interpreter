@@ -103,10 +103,13 @@ void vm_execute(Module *m) {
   LIST_FOREACH(m->constants, constant) {
     if (constant.type == CONST_TYPE_INT) {
       constants[__i] =
-          (Value){.integer = atoi(constant.value), .type = VALUE_INTEGER};
+          (Value){.integer = atoi(constant.value), .tag = VALUE_INTEGER};
     } else if (constant.type == CONST_TYPE_STRING) {
-      constants[__i] = (Value){.string = fix_escape_characters(constant.value),
-                               .type = VALUE_STRING};
+      char *fixed = fix_escape_characters(constant.value);
+      unsigned length = strlen(fixed);
+      Value value = {.tag = VALUE_POINTER,
+                     .pointer = {.elements = fixed, .length = length}};
+      constants[__i] = value;
     }
   }
 
@@ -151,7 +154,7 @@ void vm_execute(Module *m) {
       integer struct_slot = instr.b;
       integer member_idx = instr.c;
       Value *struct_val = &sf->locals[struct_slot];
-      if (struct_val->type != VALUE_STRUCT) {
+      if (struct_val->tag != VALUE_STRUCT) {
         VM_ERRF("OP_MEMBER_LOAD: value at slot %lld is not a struct",
                 struct_slot);
       }
@@ -167,7 +170,7 @@ void vm_execute(Module *m) {
       integer member_idx = instr.b;
       integer src = instr.c;
       Value *struct_val = &sf->locals[struct_slot];
-      if (struct_val->type != VALUE_STRUCT) {
+      if (struct_val->tag != VALUE_STRUCT) {
         VM_ERRF("OP_MEMBER_STORE: value at slot %lld is not a struct",
                 struct_slot);
       }
@@ -202,21 +205,21 @@ void vm_execute(Module *m) {
     case OP_ADD: {
       integer d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = sf->locals[l].integer + sf->locals[r].integer;
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_SUB: {
       integer d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = sf->locals[l].integer - sf->locals[r].integer;
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_MUL: {
       integer d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = sf->locals[l].integer * sf->locals[r].integer;
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
@@ -224,10 +227,11 @@ void vm_execute(Module *m) {
       integer d = instr.a, l = instr.b, r = instr.c;
       integer rvalue = sf->locals[r].integer;
       if (rvalue == 0) {
-        VM_ERRF("attempted to divide by zero. (div) ip=%d, fn=%s", sf->ip, sf->fn->name);
+        VM_ERRF("attempted to divide by zero. (div) ip=%d, fn=%s", sf->ip,
+                sf->fn->name);
       }
       sf->locals[d].integer = sf->locals[l].integer / rvalue;
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
@@ -296,7 +300,7 @@ void vm_execute(Module *m) {
 
     case OP_RET: {
       integer src = instr.a;
-      Value rv = {.type = VALUE_VOID};
+      Value rv = {.tag = VALUE_VOID};
       if (src >= 0) {
         rv = sf->locals[src];
       }
@@ -317,56 +321,56 @@ void vm_execute(Module *m) {
     case OP_NEGATE: {
       integer dest = instr.a, src = instr.b;
       sf->locals[dest].integer = -sf->locals[src].integer;
-      sf->locals[dest].type = VALUE_INTEGER;
+      sf->locals[dest].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_LOGICAL_OR: {
       integer d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer || sf->locals[r].integer);
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_LOGICAL_AND: {
       integer d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer && sf->locals[r].integer);
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_SHIFT_LEFT: {
       integer d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer << sf->locals[r].integer);
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_SHIFT_RIGHT: {
       integer d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer >> sf->locals[r].integer);
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_XOR: {
       integer d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer ^ sf->locals[r].integer);
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_BIT_OR: {
       integer d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer | sf->locals[r].integer);
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_BIT_AND: {
       integer d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer & sf->locals[r].integer);
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
@@ -374,51 +378,53 @@ void vm_execute(Module *m) {
       integer d = instr.a, l = instr.b, r = instr.c;
       integer rvalue = sf->locals[r].integer;
       if (rvalue == 0) {
-        VM_ERRF("attempted to divide by zero. (modulo) ip=%d, fn=%s", sf->ip, sf->fn->name);
+        VM_ERRF("attempted to divide by zero. (modulo) ip=%d, fn=%s", sf->ip,
+                sf->fn->name);
       }
       sf->locals[d].integer = (sf->locals[l].integer % rvalue);
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
+      continue;
     }
 
     case OP_EQUALS: {
       integer d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer == sf->locals[r].integer);
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_NOT_EQUALS: {
       integer d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer != sf->locals[r].integer);
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_LESS: {
       integer d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer < sf->locals[r].integer);
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_GREATER: {
       integer d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer > sf->locals[r].integer);
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_LOGICAL_NOT: {
       integer d = instr.a, s = instr.b;
       sf->locals[d].integer = !sf->locals[s].integer;
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_BIT_NOT: {
       integer d = instr.a, s = instr.b;
       sf->locals[d].integer = ~sf->locals[s].integer;
-      sf->locals[d].type = VALUE_INTEGER;
+      sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
@@ -466,12 +472,14 @@ L_EXIT:
 }
 
 void print_value(Value *value, String_Builder *sb) {
-  switch (value->type) {
+  switch (value->tag) {
   case VALUE_INTEGER:
     sb_appendf(sb, "%d", value->integer);
     break;
-  case VALUE_STRING:
-    sb_appendf(sb, "\"%s\"", value->string ? value->string : "(null)");
+  case VALUE_POINTER:
+    sb_appendf(sb, "{ ptr = %p, length = %lld, managed = %d }",
+               value->pointer.elements, value->pointer.length,
+               value->pointer.pointee == POINTEE_VALUE);
     break;
   case VALUE_STRUCT: {
     sb_appendf(sb, "{");
@@ -491,29 +499,24 @@ void print_value(Value *value, String_Builder *sb) {
 
 Value default_value_of_type(Type *type, unsigned owner_uid) {
   switch (type->tag) {
+  case TYPE_BYTE:
+    if (type_is_pointer_of_depth(type, 1)) {
+      return (Value){.tag = VALUE_POINTER,
+                     .pointer = {nullptr, 0, POINTEE_RAW}};
+    }
+  // fall through intentional
+  case TYPE_BOOL:
   case TYPE_INT: {
     return (Value){
-        .type = VALUE_INTEGER,
+        .tag = VALUE_INTEGER,
         .integer = 0,
-    };
-  }
-  case TYPE_BOOL: {
-    return (Value){
-        .type = VALUE_INTEGER,
-        .integer = 0,
-    };
-  }
-  case TYPE_STRING: {
-    return (Value){
-        .type = VALUE_STRING,
-        .string = nullptr,
     };
   }
   case TYPE_STRUCT: {
     Struct_Type *struct_type = (Struct_Type *)type;
     Value v = {
         .owner_uid = owner_uid,
-        .type = VALUE_STRUCT,
+        .tag = VALUE_STRUCT,
         .$struct.length = struct_type->members.length,
         .$struct.members = calloc(struct_type->members.length, sizeof(Value)),
     };
@@ -525,13 +528,15 @@ Value default_value_of_type(Type *type, unsigned owner_uid) {
   }
   case TYPE_FUNCTION:
   case TYPE_VOID:
-    return (Value){.type = VALUE_VOID};
+    return (Value){.tag = VALUE_VOID};
+    break;
+
     break;
   }
 }
 
 void value_free(Value *value, unsigned owner_uid) {
-  if (value->type == VALUE_STRUCT && value->owner_uid != owner_uid) {
+  if (value->tag == VALUE_STRUCT && value->owner_uid != owner_uid) {
     for (unsigned i = 0; i < value->$struct.length; ++i) {
       value_free(&value->$struct.members[i], owner_uid);
     }
@@ -552,16 +557,23 @@ void leave(Stack_Frame *frame) {
 }
 
 ffi_type type_to_ffi_type(Type *type) {
+  // both arrays and pointers can be treated as pointers
+  if (type_has_extensions(type)) {
+    return ffi_type_pointer;
+  }
+
   switch (type->tag) {
+  case TYPE_BYTE:
+  case TYPE_BOOL:
   case TYPE_INT:
     return ffi_type_sint32;
-  case TYPE_STRING:
-    return ffi_type_pointer;
   case TYPE_VOID:
     return ffi_type_void;
-  default:
+  case TYPE_FUNCTION:
+  case TYPE_STRUCT:
     fprintf(stderr, "unable to use type: %s with libffi\n", type->name);
     exit(1);
+    break;
   }
 }
 
@@ -674,32 +686,18 @@ Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc) {
   for (size_t i = 0; i < n_params; ++i) {
     arg_types[i] = &function.parameters.data[i];
     Value *v = &argv[i];
-    switch (v->type) {
+    switch (v->tag) {
     case VALUE_INTEGER:
       arg_values[i] = &v->integer;
       break;
-    case VALUE_STRING:
-      arg_values[i] = &v->string;
+    case VALUE_POINTER:
+      arg_values[i] = &v->pointer.elements;
       break;
     default:
-      char *type_name;
-      switch (v->type) {
-      case VALUE_VOID:
-        type_name = "void";
-        break;
-      case VALUE_STRUCT:
-        type_name = "struct";
-        break;
-      case VALUE_INTEGER:
-        type_name = "int";
-        break;
-      case VALUE_STRING:
-        type_name = "string";
-        break;
-      }
       fprintf(stderr,
-              "[VM:FFI] unsupported argument type '%s' (%d) for extern call\n",
-              type_name, v->type);
+              "[VM:FFI] unsupported argument type 'Value_Type(%d)' for extern "
+              "call (%s)\n",
+              v->tag, function.name);
       exit(1);
     }
   }
@@ -707,15 +705,16 @@ Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc) {
   ffi_type *ffi_return_type = &function.return_type;
 
   integer int_buf = 0;
-  char *string_buf = NULL;
+  char *ptr_buf = NULL;
   void *return_buf = NULL;
 
   integer return_type = function.original_return_type->tag;
+  bool returns_pointer = type_is_pointer(function.original_return_type);
 
   if (return_type == TYPE_INT) {
     return_buf = &int_buf;
-  } else if (return_type == TYPE_STRING) {
-    return_buf = &string_buf;
+  } else if (returns_pointer) {
+    return_buf = &ptr_buf;
   } else if (return_type == TYPE_VOID) {
     return_buf = NULL;
   }
@@ -730,11 +729,18 @@ Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc) {
   ffi_call(&cif, function.ptr, return_buf, arg_values);
 
   if (return_type == TYPE_INT) {
-    return (Value){.type = VALUE_INTEGER, .integer = int_buf};
-  } else if (return_type == TYPE_STRING) {
-    return (Value){.type = VALUE_STRING, .string = string_buf};
+    return (Value){.tag = VALUE_INTEGER, .integer = int_buf};
+  } else if (returns_pointer) {
+    return (Value){
+        .tag = VALUE_POINTER,
+        .pointer = {
+            .elements = ptr_buf,
+            // TODO: might want to do something like this but it's unsafe.
+            //  .length = strlen(ptr_buf),
+            .pointee = POINTEE_RAW,
+        }};
   } else if (return_type == TYPE_VOID) {
-    return (Value){.type = VALUE_VOID};
+    return (Value){.tag = VALUE_VOID};
   }
 
   fprintf(stderr, "[VM:FFI] no return type was specified\n");

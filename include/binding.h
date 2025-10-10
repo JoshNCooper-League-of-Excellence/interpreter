@@ -32,6 +32,7 @@ typedef struct {
   Type *integer_type;
   Type *bool_type;
   Type *void_type;
+  Type *byte_type;
 
   Type_Ptr_list type_table;
   Binding_Ptr_list bindings;
@@ -47,6 +48,7 @@ typedef struct {
 static inline bool try_find_type(Context *context, const char *name,
                                  Type **out) {
   LIST_FOREACH(context->type_table, type) {
+    if (!type->name) { continue; }
     if (strcmp(name, type->name) == 0) {
       *out = type;
       return true;

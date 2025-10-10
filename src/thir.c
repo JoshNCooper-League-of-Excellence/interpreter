@@ -403,10 +403,9 @@ Thir *type_binary(Ast *ast, Context *context) {
   Thir *left = type_expression(ast->binary.left, context);
   Thir *right = type_expression(ast->binary.right, context);
 
-
   if (ast->binary.op == OPERATOR_NONE) {
     fprintf(stderr, "invalid binary operator: OPERATOR_NONE at %s\n",
-      lexer_span_to_string(ast->span));
+            lexer_span_to_string(ast->span));
     exit(1);
   }
 
@@ -452,7 +451,7 @@ Thir *type_binary(Ast *ast, Context *context) {
   case OPERATOR_BIT_NOT:
   case OPERATOR_MODULO:
   case OPERATOR_NONE: // shouldn't be possible
-      binary->type = left->type;
+    binary->type = left->type;
     break;
   }
 
@@ -527,13 +526,51 @@ Thir *type_call(Ast *ast, Context *context) {
 }
 
 Type *get_type_from_ast_type(Ast *ast, Context *context) {
-  Type *type;
-  if (!try_find_type(context, ast->type.path, &type)) {
-    fprintf(stderr, "undeclared type: '%s' at: %s\n", ast->type.path,
-            lexer_span_to_string(ast->span));
-    exit(1);
+  Type *base_type = nullptr;
+
+  LIST_FOREACH(context->type_table, type) {
+    if (!type->name) {
+      continue;
+    }
+    if (strcmp(type->name, ast->type.path) != 0) {
+      continue;
+    }
+
+    if (type->extensions.length == 0) {
+      base_type = type;
+    }
+
+    unsigned length = type->extensions.length;
+    if (length != ast->type.extensions.length) {
+      continue;
+    }
+
+    for (unsigned i = 0; i < length; ++i) {
+      Type_Extension ast_extension = ast->type.extensions.data[i];
+      Type_Extension extension = type->extensions.data[i];
+      if (ast_extension != extension) {
+        goto L_END_OF_EXTENSION_MATCHING_LOOP;
+      }
+    }
+
+    // names & extensions match, return type.
+    return type;
+
+  L_END_OF_EXTENSION_MATCHING_LOOP:
   }
-  return type;
+
+  // found the base type, but not the extended type.
+  if (base_type) {
+    Type *extended_type = type_alloc(context);
+    extended_type->extensions = ast->type.extensions;
+    extended_type->pointee = base_type;
+    extended_type->name = base_type->name;
+    extended_type->tag = base_type->tag;
+    return extended_type;
+  }
+
+  // found nothing.
+  return nullptr;
 }
 
 Thir *type_variable(Ast *ast, Context *context) {
@@ -707,6 +744,15 @@ Thir *type_aggregate_initializer(Ast *ast, Context *context) {
 }
 
 void type_struct(Ast *ast, Context *context) {
+
+  Type *unused;
+  (void)unused;
+  if (try_find_type(context, ast->$struct.name, &unused)) {
+    fprintf(stderr, "redefinition of struct '%s' at: %s\n",
+      ast->$struct.name, lexer_span_to_string(ast->span));
+    exit(1);
+  }
+
   Struct_Type *type = struct_type_alloc(context, ast->$struct.name);
   LIST_FOREACH(ast->$struct.members, member) {
     Struct_Member struct_member;
