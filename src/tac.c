@@ -90,8 +90,7 @@ unsigned add_constant(Module *m, Thir *thir) {
     } else if (strncmp("false", value, 5) == 0) {
       value = "0";
     } else {
-      assert(false &&
-             "[TAC]: invalid constant bool, expected 'true' or 'false'");
+      assert(false && "[TAC]: invalid constant bool, expected 'true' or 'false'");
     }
   }
 
@@ -123,8 +122,7 @@ int generate_temp(Function *fn) { return (int)(fn->n_locals++); }
 
 DEFINE_LIST(int);
 
-int collect_member_path(Thir *n, int leaf_to_root[], int max_depth,
-                        Thir **out_base) {
+int collect_member_path(Thir *n, int leaf_to_root[], int max_depth, Thir **out_base) {
   int depth = 0;
   Thir *cur = n;
   while (cur->tag == THIR_MEMBER_ACCESS) {
@@ -215,8 +213,7 @@ int lower_get_lvalue_value(Thir *lhs, Function *fn, Module *m) {
     return tmp;
   }
   default: {
-    fprintf(stderr, "lower_get_lvalue_value: unsupported lvalue tag %d at %s",
-            lhs->tag, lexer_span_to_string(lhs->span));
+    fprintf(stderr, "lower_get_lvalue_value: unsupported lvalue tag %d at %s", lhs->tag, lexer_span_to_string(lhs->span));
     exit(EXIT_FAILURE);
   }
   }
@@ -231,8 +228,7 @@ void lower_set_lvalue_value(Thir *lhs, int value, Function *fn) {
     EMIT_STORE(fn->code, (int)lhs->binding->index, value);
     return;
   default: {
-    fprintf(stderr, "lower_set_lvalue_value: unsupported lvalue tag %d at %s",
-            lhs->tag, lexer_span_to_string(lhs->span));
+    fprintf(stderr, "lower_set_lvalue_value: unsupported lvalue tag %d at %s", lhs->tag, lexer_span_to_string(lhs->span));
     exit(EXIT_FAILURE);
   }
   }
@@ -245,8 +241,7 @@ int lower_lvalue_slot(Thir *n) {
   case THIR_VARIABLE:
     return (int)n->binding->index;
   default:
-    fprintf(stderr, "lower_lvalue: unsupported lvalue tag %d at %s", n->tag,
-            lexer_span_to_string(n->span));
+    fprintf(stderr, "lower_lvalue: unsupported lvalue tag %d at %s", n->tag, lexer_span_to_string(n->span));
     exit(EXIT_FAILURE);
   }
 }
@@ -254,12 +249,23 @@ int lower_lvalue_slot(Thir *n) {
 int lower_expression(Thir *n, Function *fn, Module *m) {
   assert(n && "null expression while lowering");
   switch (n->tag) {
+  case THIR_ARRAY_INITIALIZER: {
+    int dest = generate_temp(fn);
+    unsigned long long length = n->array_initializer.values.length;
+    EMIT_ALLOCA(fn->code, dest, n->type->pointee->index, length);
+    LIST_FOREACH(n->array_initializer.values, value) {
+      int v = lower_expression(value, fn, m);
+      EMIT_MEMBER_STORE(fn->code, dest, __i, v);
+    }
+    return dest;
+  } break;
   case THIR_MEMBER_ACCESS: {
     return lower_member_rvalue(n, fn, m);
   }
   case THIR_AGGREGATE_INITIALIZER: {
     int dest = generate_temp(fn);
-    EMIT_ALLOCA(fn->code, dest, n->type->index);
+    // length == 0 means one object, length > 0 means array for alloca
+    EMIT_ALLOCA(fn->code, dest, n->type->index, 0);
     LIST_FOREACH(n->aggregate_initializer.values, value) {
       int v = lower_expression(value, fn, m);
       EMIT_MEMBER_STORE(fn->code, dest, __i, v);
@@ -316,8 +322,7 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
         EMIT_SHIFT_RIGHT(fn->code, res, lhs_val, rhs);
         break;
       default:
-        fprintf(stderr, "lower_expression: unhandled compound op %d\n",
-                n->binary.op);
+        fprintf(stderr, "lower_expression: unhandled compound op %d\n", n->binary.op);
         exit(1);
       }
 
@@ -391,8 +396,7 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
       EMIT_SHIFT_RIGHT(fn->code, dest, l, r);
       break;
     default:
-      fprintf(stderr, "lower_expression: unhandled binary op %d\n",
-              n->binary.op);
+      fprintf(stderr, "lower_expression: unhandled binary op %d\n", n->binary.op);
       break;
     }
 
@@ -410,8 +414,7 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
     assert(n->call.callee && "null callee while lowering");
 
     if (n->call.callee->thir->tag == THIR_EXTERN) {
-      EMIT_CALL_EXTERN(fn->code, dest,
-                       n->call.callee->thir->extern_function.index, nargs);
+      EMIT_CALL_EXTERN(fn->code, dest, n->call.callee->thir->extern_function.index, nargs);
     } else {
       int func_idx = (int)n->call.callee->index;
       EMIT_CALL(fn->code, dest, func_idx, nargs);
@@ -517,8 +520,7 @@ void lower_block(Thir *block, Function *fn, Module *m) {
 }
 
 void lower_function(Thir *fnode, Module *m) {
-  assert(fnode && fnode->tag == THIR_FUNCTION &&
-         "lower_function: got non function node");
+  assert(fnode && fnode->tag == THIR_FUNCTION && "lower_function: got non function node");
   Function *fn = calloc(1, sizeof(Function));
   fn->name = fnode->function.name;
   fn->n_locals = 0;
@@ -550,8 +552,7 @@ void lower_function(Thir *fnode, Module *m) {
 }
 
 void lower_program(Thir *program, Module *m) {
-  assert(program && program->tag == THIR_PROGRAM &&
-         "unexpected node while lowering, expected THIR_PROGRAM");
+  assert(program && program->tag == THIR_PROGRAM && "unexpected node while lowering, expected THIR_PROGRAM");
 
   LIST_INIT(m->functions);
   LIST_INIT(m->constants);
@@ -560,36 +561,39 @@ void lower_program(Thir *program, Module *m) {
     if (f->tag == THIR_EXTERN) {
       continue; // We just ignore it.
     } else {
-      assert(f->tag == THIR_FUNCTION &&
-             "unexpected node type while lowering. expected THIR_FUNCTION");
+      assert(f->tag == THIR_FUNCTION && "unexpected node type while lowering. expected THIR_FUNCTION");
       lower_function(f, m);
     }
   }
 }
+
 void print_instr(Instr *i, String_Builder *sb, int indent) {
   for (int j = 0; j < indent; ++j)
     sb_append(sb, "  ");
   switch (i->op) {
   case OP_ALLOCA:
-    sb_appendf(sb, "ALLOCA t%d, type=%d", i->a, i->b);
-    break;
-  case OP_CALL_EXTERN:
-    sb_appendf(sb, "CALL_EXTERN t%d, ext%d, nargs=%d", i->a, i->b, i->c);
-    break;
-  case OP_MEMBER_LOAD:
-    sb_appendf(sb, "MEMBER_LOAD t%d, obj=t%d, idx=%d", i->a, i->b, i->c);
-    break;
-  case OP_MEMBER_STORE:
-    sb_appendf(sb, "MEMBER_STORE obj=t%d, idx=%d, src=t%d", i->a, i->b, i->c);
+    // ALLOCA t<dest>, <typeIndex> <length>
+    sb_appendf(sb, "ALLOCA t%d, %d, %d", i->a, i->b, i->c);
     break;
   case OP_CONST:
+    // CONST t<dest>, c<constIndex>
     sb_appendf(sb, "CONST t%d, c%d", i->a, i->b);
     break;
   case OP_LOAD:
-    sb_appendf(sb, "LOAD t%d, t%d", i->a, i->b);
+    // LOAD t<dest>, <slot>
+    sb_appendf(sb, "LOAD t%d, %d", i->a, i->b);
     break;
   case OP_STORE:
-    sb_appendf(sb, "STORE t%d, t%d", i->a, i->b);
+    // STORE <slot>, t<src>
+    sb_appendf(sb, "STORE %d, t%d", i->a, i->b);
+    break;
+  case OP_MEMBER_LOAD:
+    // MEMBER_LOAD t<dest>, t<obj>, <memberIndex>
+    sb_appendf(sb, "MEMBER_LOAD t%d, t%d, %d", i->a, i->b, i->c);
+    break;
+  case OP_MEMBER_STORE:
+    // MEMBER_STORE t<obj>, <memberIndex>, t<src>
+    sb_appendf(sb, "MEMBER_STORE t%d, %d, t%d", i->a, i->b, i->c);
     break;
   case OP_ADD:
     sb_appendf(sb, "ADD t%d, t%d, t%d", i->a, i->b, i->c);
@@ -603,33 +607,111 @@ void print_instr(Instr *i, String_Builder *sb, int indent) {
   case OP_DIV:
     sb_appendf(sb, "DIV t%d, t%d, t%d", i->a, i->b, i->c);
     break;
-  case OP_CALL:
-    sb_appendf(sb, "CALL t%d, fn%d, nargs=%d", i->a, i->b, i->c);
+  case OP_MODULO:
+    sb_appendf(sb, "MODULO t%d, t%d, t%d", i->a, i->b, i->c);
     break;
-  case OP_RET:
-    sb_appendf(sb, "RET t%d", i->a);
+  case OP_SHIFT_LEFT:
+    sb_appendf(sb, "SHIFT_LEFT t%d, t%d, t%d", i->a, i->b, i->c);
+    break;
+  case OP_SHIFT_RIGHT:
+    sb_appendf(sb, "SHIFT_RIGHT t%d, t%d, t%d", i->a, i->b, i->c);
+    break;
+  case OP_BIT_AND:
+    sb_appendf(sb, "BIT_AND t%d, t%d, t%d", i->a, i->b, i->c);
+    break;
+  case OP_BIT_OR:
+    sb_appendf(sb, "BIT_OR t%d, t%d, t%d", i->a, i->b, i->c);
+    break;
+  case OP_XOR:
+    sb_appendf(sb, "XOR t%d, t%d, t%d", i->a, i->b, i->c);
+    break;
+  case OP_EQUALS:
+    sb_appendf(sb, "EQUALS t%d, t%d, t%d", i->a, i->b, i->c);
+    break;
+  case OP_NOT_EQUALS:
+    sb_appendf(sb, "NOT_EQUALS t%d, t%d, t%d", i->a, i->b, i->c);
+    break;
+  case OP_LESS:
+    sb_appendf(sb, "LESS t%d, t%d, t%d", i->a, i->b, i->c);
+    break;
+  case OP_GREATER:
+    sb_appendf(sb, "GREATER t%d, t%d, t%d", i->a, i->b, i->c);
+    break;
+  case OP_LOGICAL_OR:
+    sb_appendf(sb, "LOGICAL_OR t%d, t%d, t%d", i->a, i->b, i->c);
+    break;
+  case OP_LOGICAL_AND:
+    sb_appendf(sb, "LOGICAL_AND t%d, t%d, t%d", i->a, i->b, i->c);
+    break;
+  case OP_NEGATE:
+    // unary: NEGATE t<dest> t<src>
+    sb_appendf(sb, "NEGATE t%d, t%d", i->a, i->b);
+    break;
+  case OP_LOGICAL_NOT:
+    sb_appendf(sb, "LOGICAL_NOT t%d, t%d", i->a, i->b);
+    break;
+  case OP_BIT_NOT:
+    sb_appendf(sb, "BIT_NOT t%d, t%d", i->a, i->b);
     break;
   case OP_PUSH:
-    sb_appendf(sb, "ARG i=%d, src=t%d", i->a, i->b);
+    // PUSH t<src>
+    sb_appendf(sb, "PUSH t%d", i->a);
+    break;
+  case OP_CALL:
+    // CALL t<dest>, <funcIndex>, <nargs>
+    sb_appendf(sb, "CALL t%d, %d, %d", i->a, i->b, i->c);
+    break;
+  case OP_CALL_EXTERN:
+    // CALL_EXTERN t<dest>, <externIndex>, <nargs>
+    sb_appendf(sb, "CALL_EXTERN t%d, %d, %d", i->a, i->b, i->c);
+    break;
+  case OP_RET:
+    // RET t<src> | RET -1
+    if (i->a >= 0)
+      sb_appendf(sb, "RET t%d", i->a);
+    else
+      sb_append(sb, "RET -1");
+    break;
+  case OP_JUMP:
+    // JUMP <offset>
+    sb_appendf(sb, "JUMP %d", i->a);
+    break;
+  case OP_JUMP_IF:
+    // JUMP_IF t<cond>, <offset>
+    sb_appendf(sb, "JUMP_IF t%d, %d", i->a, i->b);
     break;
   default:
-    sb_appendf(sb, "UNKNOWN_OP %d", i->op);
+    sb_appendf(sb, "UNKNOWN %d", i->op);
     break;
   }
 }
 
 void print_module(Module *m, String_Builder *sb) {
+
+  sb_append(sb, "EXTERNS:\n");
+  for (size_t i = 0; i < CACHED_EXTERNS.length; ++i) {
+    Extern_Function *ext = &CACHED_EXTERNS.data[i];
+    sb_appendf(sb, "  [%zu]: extern %s(", i, ext->name);
+    Function_Type *ftype = ext->function_type;
+    for (size_t j = 0; j < ftype->parameters.length; ++j) {
+      Type *param = ftype->parameters.data[j];
+      print_type(param, sb);
+      if (j + 1 < ftype->parameters.length)
+        sb_append(sb, ", ");
+    }
+    sb_append(sb, ") -> ");
+    print_type(ftype->returns, sb);
+    sb_appendch(sb, '\n');
+  }
+
   sb_append(sb, "TYPES:\n");
   for (size_t i = 0; i < m->types.length; ++i) {
     Type *type = m->types.data[i];
     if (type->tag == TYPE_STRUCT) {
       Struct_Type *struct_type = (Struct_Type *)type;
       sb_appendf(sb, "  [%zu]: struct %s {\n", i, type->name);
-      LIST_FOREACH(struct_type->members, member) {
-        sb_append(sb, "         ");
-        sb_appendf(sb, "[%zu]: %s\n", __i, member.type->name);
-      }
-      sb_append(sb, "       }\n");
+      LIST_FOREACH(struct_type->members, member) { sb_appendf(sb, "          [%zu]: %s\n", __i, member.type->name); }
+      sb_append(sb, "        }\n");
     }
   }
 
@@ -638,12 +720,10 @@ void print_module(Module *m, String_Builder *sb) {
     sb_append(sb, "  ");
     switch (constant.type) {
     case CONST_TYPE_STRING:
-      sb_appendf(sb, "[%d]: { type: %s, value: \"%s\\0\" }\n", __i,
-                 constant_type_to_string(constant.type), constant.value);
+      sb_appendf(sb, "[%d]: { type: %s, value: \"%s\\0\" }\n", __i, constant_type_to_string(constant.type), constant.value);
       break;
     case CONST_TYPE_INT:
-      sb_appendf(sb, "[%d]: { type: %s, value: %s }\n", __i,
-                 constant_type_to_string(constant.type), constant.value);
+      sb_appendf(sb, "[%d]: { type: %s, value: %s }\n", __i, constant_type_to_string(constant.type), constant.value);
       break;
     }
   }
@@ -658,6 +738,4 @@ void print_module(Module *m, String_Builder *sb) {
   }
 }
 
-void module_init(Module *m, Context *context) {
-  m->types = context->type_table;
-}
+void module_init(Module *m, Context *context) { m->types = context->type_table; }

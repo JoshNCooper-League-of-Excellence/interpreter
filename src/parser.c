@@ -6,15 +6,15 @@
 #include "type.h"
 #include <limits.h>
 
-void print_ast_function_header(Ast *function) {
-  printf("%s :: (", function->function.name);
+void print_ast_function_header(Ast *function, String_Builder *sb) {
+  sb_appendf(sb, "%s :: (", function->function.name);
   LIST_FOREACH(function->function.parameters, param) {
-    printf("%s %s", param.name, param.type->type.path);
+    sb_appendf(sb, "%s %s", param.name, param.type->type.path);
     if (__i != function->function.parameters.length - 1) {
-      printf(", ");
+      sb_append(sb, ", ");
     }
   }
-  printf(") %s\n", function->function.return_type);
+  sb_appendf(sb, ") %s\n", function->function.return_type);
 }
 
 #define EXPECT($expected)                                                      \
@@ -375,7 +375,7 @@ Ast *parse_expression(Lexer *lexer, Context *context) {
 }
 
 bool parse_function_header(Lexer *lexer, Context *context, const char **name,
-                           Parameter_list *parameters, const char **return_type,
+                           Parameter_list *parameters, Ast **return_type,
                            Span *span) {
   Token identifier = EXPECT(TOKEN_IDENTIFIER);
   *name = identifier.value;
@@ -415,8 +415,7 @@ bool parse_function_header(Lexer *lexer, Context *context, const char **name,
   }
 
   EXPECT(TOKEN_RPAREN);
-  Token returns = EXPECT(TOKEN_IDENTIFIER);
-  *return_type = returns.value;
+  *return_type = parse_type(lexer, context);
   return true;
 }
 
@@ -424,7 +423,7 @@ Ast *parse_function(Lexer *lexer, Context *context) {
   Span span;
   const char *name;
   Parameter_list parameters = {0};
-  const char *return_type;
+  Ast *return_type;
 
   if (!parse_function_header(lexer, context, &name, &parameters, &return_type,
                              &span)) {
@@ -459,7 +458,7 @@ Ast *parse_extern(Lexer *lexer, Context *context) {
   BEGIN_SPAN(EXPECT(TOKEN_EXTERN));
   const char *name;
   Parameter_list parameters = {0};
-  const char *return_type;
+  Ast *return_type;
   Span header_span;
 
   if (!parse_function_header(lexer, context, &name, &parameters, &return_type,

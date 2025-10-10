@@ -4,6 +4,7 @@
 #include "ast.h"
 #include "binding.h"
 #include "lexer.h"
+#include "type.h"
 
 typedef enum {
   THIR_PROGRAM,
@@ -17,6 +18,7 @@ typedef enum {
   THIR_CALL,
   THIR_EXTERN,
   THIR_AGGREGATE_INITIALIZER,
+  THIR_ARRAY_INITIALIZER,
   THIR_MEMBER_ACCESS,
   THIR_IF,
 } Thir_Tag;
@@ -32,6 +34,7 @@ typedef struct {
   size_t index;
   void *ptr;
   Type *original_return_type;
+  Function_Type *function_type;
 } Extern_Function;
 
 struct Thir;
@@ -59,6 +62,10 @@ typedef struct Thir {
       Thir_Ptr_list values;
       string_list keys;
     } aggregate_initializer;
+
+    struct {
+      Thir_Ptr_list values;
+    } array_initializer;
 
     struct {
       struct Thir *base;
@@ -155,6 +162,13 @@ static inline void print_ir_rec(Thir *node, String_Builder *sb, int indent) {
   sb_append(sb, "\n");
 
   switch (node->tag) {
+    case THIR_ARRAY_INITIALIZER:
+      print_indent_ir(sb, indent + 1);
+      sb_append(sb, "values:\n");
+      for (size_t i = 0; i < node->array_initializer.values.length; ++i) {
+        print_ir_rec(node->array_initializer.values.data[i], sb, indent + 2);
+      }
+      break;
   case THIR_IF:
     print_indent_ir(sb, indent + 1);
     sb_append(sb, "condition:\n");

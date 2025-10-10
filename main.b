@@ -1,23 +1,33 @@
-extern puts :: (byte*) int;
+// extern puts :: (byte*) int;
+// extern printf :: (byte*, void*) int;
+// extern strlen :: (byte*) int;
+// extern malloc :: (int) void*;
+// extern free :: (void*) void;
+// extern memcpy :: (byte*, byte*, int) void;
 
-extern strlen :: (byte*) int;
+// struct string { data byte*, length int }
 
-extern malloc :: (int) void*;
+// str :: (data byte*) string {
+//   return { data, strlen(data) };
+// }
 
-struct string {
-  data byte*,
-  length int
-}
+// main :: () void {
+//   x int = 0;
+//   s string = str("Hello, World!");
+//   p void* = malloc(1000);
 
-str :: (data byte*) string {
-  return { data, strlen(data) };
-}
+//   a int[] = {0, 1, 2, 3, 4};
+
+//   printf("%p\n", p);
+//   memcpy(p, "Hello, World", 100);
+  
+//   if s.length > 12 {
+//     puts(s.data);
+//   }
+
+//   free(p);
+// }
 
 main :: () void {
-  x int = 0;
-  s string = str("Hello, World!");
-
-  if s.length > 12 {
-    puts(s.data);
-  }
+  a int[] = {0,1,2};
 }

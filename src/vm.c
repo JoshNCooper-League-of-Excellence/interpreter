@@ -9,12 +9,11 @@
 // this is the integer type the entire VM runs on (data-wise)
 typedef signed long long integer;
 
-#define VM_ERRF(msg, ...)                                                      \
-  fprintf(stderr, "[VM]: " msg "\n" __VA_OPT__(, ) __VA_ARGS__);               \
+#define VM_ERRF(msg, ...)                                                                                                   \
+  fprintf(stderr, "[VM]: " msg "\n" __VA_OPT__(, ) __VA_ARGS__);                                                            \
   exit(1);
 
-static inline Stack_Frame enter(Function *fn, integer ret_dest,
-                                integer caller) {
+static inline Stack_Frame enter(Function *fn, integer ret_dest, integer caller) {
   Stack_Frame frame;
   frame.fn = fn;
   // always allocate at least a byte, to simplify freeing for now
@@ -81,12 +80,12 @@ static inline char *fix_escape_characters(const char *s) {
   return result;
 }
 
-#define FETCH()                                                                \
-  do {                                                                         \
-    if (sf->ip >= sf->fn->code.length)                                         \
-      goto L_RETURN_TO_CALLER;                                                 \
-    instr = sf->fn->code.data[sf->ip++];                                       \
-    goto *dispatch[instr.op];                                                  \
+#define FETCH()                                                                                                             \
+  do {                                                                                                                      \
+    if (sf->ip >= sf->fn->code.length)                                                                                      \
+      goto L_RETURN_TO_CALLER;                                                                                              \
+    instr = sf->fn->code.data[sf->ip++];                                                                                    \
+    goto *dispatch[instr.op];                                                                                               \
   } while (0)
 
 void vm_execute(Module *m) {
@@ -102,13 +101,11 @@ void vm_execute(Module *m) {
   // collect constants into 'Value's
   LIST_FOREACH(m->constants, constant) {
     if (constant.type == CONST_TYPE_INT) {
-      constants[__i] =
-          (Value){.integer = atoi(constant.value), .tag = VALUE_INTEGER};
+      constants[__i] = (Value){.integer = atoi(constant.value), .tag = VALUE_INTEGER};
     } else if (constant.type == CONST_TYPE_STRING) {
       char *fixed = fix_escape_characters(constant.value);
       unsigned length = strlen(fixed);
-      Value value = {.tag = VALUE_POINTER,
-                     .pointer = {.elements = fixed, .length = length}};
+      Value value = {.tag = VALUE_POINTER, .pointer = {.elements = fixed, .length = length}};
       constants[__i] = value;
     }
   }
@@ -142,10 +139,15 @@ void vm_execute(Module *m) {
     case OP_ALLOCA: {
       integer dest = instr.a;
       integer ty_idx = instr.b;
-      if (ty_idx < 0 || (unsigned)ty_idx >= m->types.length) {
-        VM_ERRF("invalid type index %lld", ty_idx);
+      integer length = instr.c;
+      Type *type = m->types.data[ty_idx];
+
+      if (length == 0) {
+        sf->locals[dest] = default_value_of_type(type, sf->uid);
+      } else {
+        sf->locals[dest] = default_array_of_type(type, sf->uid, length);
       }
-      sf->locals[dest] = default_value_of_type(m->types.data[ty_idx], sf->uid);
+
       continue;
     }
 
@@ -153,15 +155,17 @@ void vm_execute(Module *m) {
       integer dest = instr.a;
       integer struct_slot = instr.b;
       integer member_idx = instr.c;
-      Value *struct_val = &sf->locals[struct_slot];
-      if (struct_val->tag != VALUE_STRUCT) {
-        VM_ERRF("OP_MEMBER_LOAD: value at slot %lld is not a struct",
-                struct_slot);
+      Value *val = &sf->locals[struct_slot];
+      if (val->tag == VALUE_STRUCT) {
+        sf->locals[dest] = val->$struct.members[member_idx];
+      } else if (val->tag == VALUE_POINTER) {
+        if (val->pointer.pointee == POINTEE_VALUE) {
+          sf->locals[dest] = ((Value *)val->pointer.elements)[member_idx];
+        } else {
+          VM_ERRF("OP_MEMBER_LOAD not supported for unmanged pointers or arrays yet");
+        }
       }
-      if (member_idx < 0 || (size_t)member_idx >= struct_val->$struct.length) {
-        VM_ERRF("OP_MEMBER_LOAD: invalid member index %lld", member_idx);
-      }
-      sf->locals[dest] = struct_val->$struct.members[member_idx];
+
       continue;
     }
 
@@ -169,15 +173,16 @@ void vm_execute(Module *m) {
       integer struct_slot = instr.a;
       integer member_idx = instr.b;
       integer src = instr.c;
-      Value *struct_val = &sf->locals[struct_slot];
-      if (struct_val->tag != VALUE_STRUCT) {
-        VM_ERRF("OP_MEMBER_STORE: value at slot %lld is not a struct",
-                struct_slot);
+      Value *val = &sf->locals[struct_slot];
+      if (val->tag == VALUE_STRUCT) {
+        val->$struct.members[member_idx] = sf->locals[src];
+      } else if (val->tag == VALUE_POINTER) {
+        if (val->pointer.pointee == POINTEE_VALUE) {
+          ((Value *)val->pointer.elements)[member_idx] = sf->locals[src];
+        } else {
+          VM_ERRF("OP_MEMBER_STORE not supported for unmanged pointers or arrays yet");
+        }
       }
-      if (member_idx < 0 || (size_t)member_idx >= struct_val->$struct.length) {
-        VM_ERRF("OP_MEMBER_STORE: invalid member index %lld", member_idx);
-      }
-      struct_val->$struct.members[member_idx] = sf->locals[src];
       continue;
     }
 
@@ -227,8 +232,7 @@ void vm_execute(Module *m) {
       integer d = instr.a, l = instr.b, r = instr.c;
       integer rvalue = sf->locals[r].integer;
       if (rvalue == 0) {
-        VM_ERRF("attempted to divide by zero. (div) ip=%d, fn=%s", sf->ip,
-                sf->fn->name);
+        VM_ERRF("attempted to divide by zero. (div) ip=%d, fn=%s", sf->ip, sf->fn->name);
       }
       sf->locals[d].integer = sf->locals[l].integer / rvalue;
       sf->locals[d].tag = VALUE_INTEGER;
@@ -261,7 +265,6 @@ void vm_execute(Module *m) {
       Value value = libffi_dynamic_dispatch(callee, &arg_stack[base], nargs);
       arg_p = base; // pop
       sf->locals[dest] = value;
-
       continue;
     }
 
@@ -281,9 +284,7 @@ void vm_execute(Module *m) {
 
       integer base = arg_p - nargs;
       if (base < 0) {
-        VM_ERRF(
-            "not enough arguments on arg stack for call (need=%lld have=%lld)",
-            nargs, arg_p);
+        VM_ERRF("not enough arguments on arg stack for call (need=%lld have=%lld)", nargs, arg_p);
       }
 
       integer new_sp = sp + 1;
@@ -378,8 +379,7 @@ void vm_execute(Module *m) {
       integer d = instr.a, l = instr.b, r = instr.c;
       integer rvalue = sf->locals[r].integer;
       if (rvalue == 0) {
-        VM_ERRF("attempted to divide by zero. (modulo) ip=%d, fn=%s", sf->ip,
-                sf->fn->name);
+        VM_ERRF("attempted to divide by zero. (modulo) ip=%d, fn=%s", sf->ip, sf->fn->name);
       }
       sf->locals[d].integer = (sf->locals[l].integer % rvalue);
       sf->locals[d].tag = VALUE_INTEGER;
@@ -428,9 +428,6 @@ void vm_execute(Module *m) {
       continue;
     }
 
-    case OP_INDEX:
-      VM_ERRF("[...] index operations not implemented");
-
     case OP_JUMP_IF: {
       integer cond = instr.a;
       integer target = instr.b;
@@ -477,8 +474,7 @@ void print_value(Value *value, String_Builder *sb) {
     sb_appendf(sb, "%d", value->integer);
     break;
   case VALUE_POINTER:
-    sb_appendf(sb, "{ ptr = %p, length = %lld, managed = %d }",
-               value->pointer.elements, value->pointer.length,
+    sb_appendf(sb, "{ ptr = %p, length = %lld, managed = %d }", value->pointer.elements, value->pointer.length,
                value->pointer.pointee == POINTEE_VALUE);
     break;
   case VALUE_STRUCT: {
@@ -497,12 +493,25 @@ void print_value(Value *value, String_Builder *sb) {
   }
 }
 
+Value default_array_of_type(Type *type, unsigned owner_uid, unsigned long long length) {
+  Value *data;
+  Value array = {.tag = VALUE_POINTER,
+                 .pointer = {
+                     .length = length,
+                     .elements = data = malloc(sizeof(Value) * length),
+                     .pointee = POINTEE_VALUE,
+                 }};
+  for (unsigned long long i = 0; i < length; ++i) {
+    data[i] = default_value_of_type(type, owner_uid);
+  }
+  return array;
+}
+
 Value default_value_of_type(Type *type, unsigned owner_uid) {
   switch (type->tag) {
   case TYPE_BYTE:
     if (type_is_pointer_of_depth(type, 1)) {
-      return (Value){.tag = VALUE_POINTER,
-                     .pointer = {nullptr, 0, POINTEE_RAW}};
+      return (Value){.tag = VALUE_POINTER, .pointer = {nullptr, 0, POINTEE_RAW}, .type = type};
     }
   // fall through intentional
   case TYPE_BOOL:
@@ -510,6 +519,7 @@ Value default_value_of_type(Type *type, unsigned owner_uid) {
     return (Value){
         .tag = VALUE_INTEGER,
         .integer = 0,
+        .type = type,
     };
   }
   case TYPE_STRUCT: {
@@ -519,6 +529,7 @@ Value default_value_of_type(Type *type, unsigned owner_uid) {
         .tag = VALUE_STRUCT,
         .$struct.length = struct_type->members.length,
         .$struct.members = calloc(struct_type->members.length, sizeof(Value)),
+        .type = type,
     };
     for (size_t i = 0; i < struct_type->members.length; ++i) {
       Type *type = struct_type->members.data[i].type;
@@ -528,7 +539,7 @@ Value default_value_of_type(Type *type, unsigned owner_uid) {
   }
   case TYPE_FUNCTION:
   case TYPE_VOID:
-    return (Value){.tag = VALUE_VOID};
+    return (Value){.tag = VALUE_VOID, .type = type};
     break;
 
     break;
@@ -584,11 +595,7 @@ Extern_Function get_ffi_function_from_thir(Thir *thir) {
     }
   }
 
-  const char *LIB_SEARCH_PATHS[] = {"libm.so.6",
-                                    "libm.so",
-                                    "libc.so.6",
-                                    "libc.so",
-                                    "/home/josh/source/c/bindings/libb.so",
+  const char *LIB_SEARCH_PATHS[] = {"libm.so.6", "libm.so", "libc.so.6", "libc.so", "/home/josh/source/c/bindings/libb.so",
                                     NULL};
 
   static struct {
@@ -638,8 +645,7 @@ Extern_Function get_ffi_function_from_thir(Thir *thir) {
   }
 
   if (!symbol) {
-    fprintf(stderr, "unable to find symbol '%s' in system libraries\n",
-            thir->extern_function.name);
+    fprintf(stderr, "unable to find symbol '%s' in system libraries\n", thir->extern_function.name);
     exit(1);
   }
 
@@ -647,15 +653,13 @@ Extern_Function get_ffi_function_from_thir(Thir *thir) {
 
   Extern_Function extern_function = {.name = thir->extern_function.name,
                                      .parameters = {0},
-                                     .return_type =
-                                         type_to_ffi_type(type->returns),
+                                     .return_type = type_to_ffi_type(type->returns),
                                      .index = CACHED_EXTERNS.length,
                                      .ptr = symbol,
-                                     .original_return_type = type->returns};
+                                     .original_return_type = type->returns,
+                                     .function_type = type};
 
-  LIST_FOREACH(type->parameters, parameter) {
-    LIST_PUSH(extern_function.parameters, type_to_ffi_type(parameter));
-  }
+  LIST_FOREACH(type->parameters, parameter) { LIST_PUSH(extern_function.parameters, type_to_ffi_type(parameter)); }
 
   LIST_PUSH(CACHED_EXTERNS, extern_function);
 
@@ -666,8 +670,7 @@ Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc) {
   ffi_cif cif;
 
   if (!function.ptr) {
-    fprintf(stderr, "[VM:FFI] error: function.ptr is (nil) for extern '%s'\n",
-            function.name);
+    fprintf(stderr, "[VM:FFI] error: function.ptr is (nil) for extern '%s'\n", function.name);
     exit(1);
   }
 
@@ -708,19 +711,18 @@ Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc) {
   char *ptr_buf = NULL;
   void *return_buf = NULL;
 
-  integer return_type = function.original_return_type->tag;
+  Type *return_type = function.original_return_type;
   bool returns_pointer = type_is_pointer(function.original_return_type);
 
-  if (return_type == TYPE_INT) {
+  if (return_type->tag == TYPE_INT) {
     return_buf = &int_buf;
   } else if (returns_pointer) {
     return_buf = &ptr_buf;
-  } else if (return_type == TYPE_VOID) {
+  } else if (return_type->tag == TYPE_VOID) {
     return_buf = NULL;
   }
 
-  integer prep = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned)n_params,
-                              ffi_return_type, arg_types);
+  integer prep = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned)n_params, ffi_return_type, arg_types);
   if (prep != FFI_OK) {
     fprintf(stderr, "[VM:FFI] ffi_prep_cif failed: %lld\n", prep);
     exit(1);
@@ -728,19 +730,18 @@ Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc) {
 
   ffi_call(&cif, function.ptr, return_buf, arg_values);
 
-  if (return_type == TYPE_INT) {
-    return (Value){.tag = VALUE_INTEGER, .integer = int_buf};
+  if (return_type->tag == TYPE_INT) {
+    return (Value){.tag = VALUE_INTEGER, .integer = int_buf, .type = return_type};
   } else if (returns_pointer) {
-    return (Value){
-        .tag = VALUE_POINTER,
-        .pointer = {
-            .elements = ptr_buf,
-            // TODO: might want to do something like this but it's unsafe.
-            //  .length = strlen(ptr_buf),
-            .pointee = POINTEE_RAW,
-        }};
-  } else if (return_type == TYPE_VOID) {
-    return (Value){.tag = VALUE_VOID};
+    return (Value){.tag = VALUE_POINTER,
+                   .type = return_type,
+                   .pointer = {
+                       .elements = ptr_buf,
+                       .length = 1,
+                       .pointee = POINTEE_RAW,
+                   }};
+  } else if (return_type->tag == TYPE_VOID) {
+    return (Value){.tag = VALUE_VOID, .type = return_type};
   }
 
   fprintf(stderr, "[VM:FFI] no return type was specified\n");

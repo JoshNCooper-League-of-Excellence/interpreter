@@ -105,12 +105,12 @@ void context_initialize(Context *context) {
   u8_type->name = "byte";
   u8_type->tag = TYPE_BYTE;
 
-
-  Type *u8_ptr_type = type_alloc(context);
-  context->string_type = u8_ptr_type;
-  u8_ptr_type->name = "byte";
-  LIST_PUSH(u8_ptr_type->extensions, TYPE_EXT_POINTER);
-  u8_ptr_type->tag = TYPE_BYTE;
+  Type *byte_ptr_type = type_alloc(context);
+  context->string_type = byte_ptr_type;
+  byte_ptr_type->name = "byte";
+  byte_ptr_type->pointee = u8_type;
+  LIST_PUSH(byte_ptr_type->extensions, TYPE_EXT_POINTER);
+  byte_ptr_type->tag = TYPE_BYTE;
 
   Type *void_type = type_alloc(context);
   context->void_type = void_type;

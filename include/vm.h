@@ -21,6 +21,7 @@ typedef enum {
 typedef struct Value {
   unsigned owner_uid;
   Value_Type tag;
+  Type *type;
   union {
     signed long long integer;
     struct {
@@ -39,8 +40,6 @@ typedef struct Value {
   };
 } Value;
 
-void print_value(Value *value, String_Builder *sb);
-
 #define VM_STACK_LENGTH 1024
 
 typedef struct {
@@ -57,7 +56,10 @@ void vm_execute(Module *module);
 
 Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc);
 
+Value default_array_of_type(Type *type, unsigned owner_uid, unsigned long long length);
 Value default_value_of_type(Type *type, unsigned owner_id);
+
+void print_value(Value *value, String_Builder *sb);
 
 void leave(Stack_Frame *frame);
 #endif // #ifndef VM_H

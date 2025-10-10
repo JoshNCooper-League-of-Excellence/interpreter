@@ -61,7 +61,7 @@ inline static void print_type(Type *type, String_Builder *sb) {
 
 inline static bool type_is_array(Type *type) {
   return type->extensions.length &&
-         type->extensions.data[type->extensions.length - 1] == TYPE_EXT_POINTER;
+         type->extensions.data[type->extensions.length - 1] == TYPE_EXT_ARRAY;
 }
 
 inline static bool type_has_extensions(Type *type) {

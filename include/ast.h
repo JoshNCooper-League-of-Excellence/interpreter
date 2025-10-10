@@ -199,7 +199,6 @@ typedef struct {
 
 DEFINE_LIST(Ast_Struct_Member)
 
-
 typedef struct Ast {
   Binding *binding;
   Span span;
@@ -265,13 +264,13 @@ typedef struct Ast {
     struct {
       struct Ast *block;
       Parameter_list parameters;
-      const char *return_type;
       const char *name;
+      struct Ast *return_type;
     } function;
 
     struct {
       Parameter_list parameters;
-      const char *return_type;
+      struct Ast *return_type;
       const char *name;
     } extern_function;
 
@@ -376,6 +375,18 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
     sb_append(sb, "path: ");
     sb_append(sb, node->type.path ? node->type.path : "null");
     sb_append(sb, "\n");
+    print_indent(sb, indent + 1);
+    sb_append(sb, "extensions:\n");
+    for (size_t i = 0; i < node->type.extensions.length; ++i) {
+      print_indent(sb, indent + 2);
+      Type_Extension ext = node->type.extensions.data[i];
+      if (ext == TYPE_EXT_POINTER) {
+        sb_appendch(sb, '*');
+      } else {
+        sb_append(sb, "[]");
+      }
+      sb_appendch(sb, '\n');
+    }
     break;
   case AST_EXTERN: {
     print_indent(sb, indent + 1);
@@ -384,9 +395,7 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
     sb_append(sb, "\n");
     print_indent(sb, indent + 1);
     sb_append(sb, "return_type: ");
-    sb_append(sb, node->extern_function.return_type
-                      ? node->extern_function.return_type
-                      : "void");
+    print_ast_rec(node->extern_function.return_type, sb, 0);
     sb_append(sb, "\n");
     print_indent(sb, indent + 1);
     sb_append(sb, "parameters:\n");
@@ -434,8 +443,7 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
     sb_append(sb, "\n");
     print_indent(sb, indent + 1);
     sb_append(sb, "return_type: ");
-    sb_append(sb,
-              node->function.return_type ? node->function.return_type : "void");
+    print_ast_rec(node->function.return_type, sb, 0);
     sb_append(sb, "\n");
     print_indent(sb, indent + 1);
     sb_append(sb, "parameters:\n");
