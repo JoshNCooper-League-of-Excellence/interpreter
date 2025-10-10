@@ -3,7 +3,6 @@
 #include "lexer.h"
 #include <limits.h>
 
-
 #define RETURN_OP_NONE_MSG(msg)                                                \
   do {                                                                         \
     if (error && !*error) {                                                    \
@@ -22,8 +21,7 @@
     return OPERATOR_NONE;                                                      \
   } while (0)
 
-Operator parse_operator(Lexer *lexer, Context *context,
-                        Expression_Type expr_type, Ast **error);
+Operator parse_operator(Lexer *lexer, Expression_Type expr_type);
 
 Precedence get_precedence(Operator op, bool *is_valid_operator);
 

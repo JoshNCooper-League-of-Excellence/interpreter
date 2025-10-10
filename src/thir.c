@@ -8,6 +8,7 @@
 #include "type.h"
 #include <dlfcn.h>
 #include <ffi.h>
+#include <stdnoreturn.h>
 
 #define _GNU_SOURCE
 #ifndef __USE_MISC
@@ -30,7 +31,15 @@ const char *get_function_type_string(Type_Ptr_list arguments,
   return sb.value;
 }
 
-Binding *get_binding(const char *identifier, Span span, Context *context);
+[[noreturn]]
+void use_of_undeclared(const char *kind, const char *identifier, Span span) {
+  char *span_string = lexer_span_to_string(span);
+  fprintf(stderr, "use of undeclared %s '%s' at: %s", kind, identifier,
+          span_string);
+  exit(1);
+}
+
+Binding *get_binding(const char *identifier, Context *context);
 
 Binding_Ptr_list typer_convert_parameters(Context *context,
                                           Parameter_list parameters, Span span,
@@ -57,7 +66,7 @@ Binding_Ptr_list typer_convert_parameters(Context *context,
   return bindings;
 }
 
-Binding *get_binding(const char *identifier, Span span, Context *context) {
+Binding *get_binding(const char *identifier, Context *context) {
   if (!identifier) {
     fprintf(stderr, "error: null identifier in get_binding()\n");
     exit(1);
@@ -114,12 +123,7 @@ Binding *get_binding(const char *identifier, Span span, Context *context) {
     }
   }
 
-  char *buf;
-  char *span_string = lexer_span_to_string(span);
-  asprintf(&buf, "use of undeclared identifier '%s' at: %s", identifier,
-           span_string);
-  fprintf(stderr, "%s\n", buf);
-  exit(1);
+  return nullptr;
 }
 
 [[noreturn]]
@@ -173,10 +177,8 @@ Thir *type_extern(Ast *ast, Context *context) {
 
   Type *return_type;
   if (!try_find_type(context, ast->extern_function.return_type, &return_type)) {
-    char *buf;
-    asprintf(&buf, "use of undeclared type as return type: '%s' at %s",
-             ast->extern_function.return_type, lexer_span_to_string(ast->span));
-    fprintf(stderr, "%s\n", buf);
+    fprintf(stderr, "use of undeclared type as return type: '%s' at %s\n",
+            ast->extern_function.return_type, lexer_span_to_string(ast->span));
     exit(1);
   }
 
@@ -214,10 +216,8 @@ Thir *type_function(Ast *ast, Context *context) {
 
   Type *return_type;
   if (!try_find_type(context, ast_fn.return_type, &return_type)) {
-    char *buf;
-    asprintf(&buf, "use of undeclared type as return type: '%s' at %s",
-             ast_fn.return_type, lexer_span_to_string(ast->span));
-    fprintf(stderr, "%s\n", buf);
+    fprintf(stderr, "use of undeclared type as return type: '%s' at %s\n",
+            ast_fn.return_type, lexer_span_to_string(ast->span));
     exit(1);
   }
 
@@ -269,14 +269,10 @@ Thir *type_literal(Ast *ast, Context *context) {
 }
 
 Thir *type_identifier(Ast *ast, Context *context) {
-  Binding *binding = get_binding(ast->identifier, ast->span, context);
+  Binding *binding = get_binding(ast->identifier, context);
 
   if (!binding) {
-    char *buf;
-    asprintf(&buf, "use of undeclared identifier \"%s\" at: %s",
-             ast->variable.name, lexer_span_to_string(ast->span));
-    fprintf(stderr, "%s\n", buf);
-    exit(1);
+    use_of_undeclared("identifier", ast->identifier, ast->span);
   }
 
   return binding->thir;
@@ -327,10 +323,8 @@ Thir *type_block(Ast *ast, Context *context) {
       LIST_PUSH(statements, type_variable(statement, context));
       break;
     default:
-      char *buf;
-      asprintf(&buf, "unexpected statement type in block: %d at: %s",
-               statement->tag, lexer_span_to_string(ast->span));
-      fprintf(stderr, "%s\n", buf);
+      fprintf(stderr, "unexpected statement type in block: %d at: %s\n",
+              statement->tag, lexer_span_to_string(ast->span));
       exit(1);
     }
   }
@@ -349,10 +343,8 @@ Thir *type_expression(Ast *ast, Context *context) {
     Type *base_type = base->type;
 
     if (base_type->tag != TYPE_STRUCT) {
-      char *buf;
-      asprintf(&buf, "error: member access only allowed for structs at: %s",
-               lexer_span_to_string(ast->span));
-      fprintf(stderr, "%s\n", buf);
+      fprintf(stderr, "error: member access only allowed for structs at: %s\n",
+              lexer_span_to_string(ast->span));
       exit(1);
     }
 
@@ -367,10 +359,8 @@ Thir *type_expression(Ast *ast, Context *context) {
     }
 
     if (index < 0) {
-      char *buf;
-      asprintf(&buf, "error: member '%s' not found in struct at: %s",
-               ast->member_access.member, lexer_span_to_string(ast->span));
-      fprintf(stderr, "%s\n", buf);
+      fprintf(stderr, "error: member '%s' not found in struct at: %s\n",
+              ast->member_access.member, lexer_span_to_string(ast->span));
       exit(1);
     }
 
@@ -391,10 +381,8 @@ Thir *type_expression(Ast *ast, Context *context) {
   case AST_BINARY:
     return type_binary(ast, context);
   default:
-    char *buf;
-    asprintf(&buf, "unexpected expression node type: %d, at %s", ast->tag,
-             lexer_span_to_string(ast->span));
-    fprintf(stderr, "%s\n", buf);
+    fprintf(stderr, "unexpected expression node type: %d, at %s\n", ast->tag,
+            lexer_span_to_string(ast->span));
     exit(1);
   }
 }
@@ -414,6 +402,13 @@ Thir *type_binary(Ast *ast, Context *context) {
 
   Thir *left = type_expression(ast->binary.left, context);
   Thir *right = type_expression(ast->binary.right, context);
+
+
+  if (ast->binary.op == OPERATOR_NONE) {
+    fprintf(stderr, "invalid binary operator: OPERATOR_NONE at %s\n",
+      lexer_span_to_string(ast->span));
+    exit(1);
+  }
 
   switch (ast->binary.op) {
   case OPERATOR_LOGICAL_OR:
@@ -455,8 +450,9 @@ Thir *type_binary(Ast *ast, Context *context) {
   case OPERATOR_DIV:
   case OPERATOR_LOGICAL_NOT:
   case OPERATOR_BIT_NOT:
-    break;
-  default:
+  case OPERATOR_MODULO:
+  case OPERATOR_NONE: // shouldn't be possible
+      binary->type = left->type;
     break;
   }
 
@@ -473,30 +469,31 @@ Thir *type_return(Ast *ast, Context *context) {
     ret->return_value = type_expression(ast->return_value, context);
     if (context->typer_expected_type &&
         ret->return_value->type != context->typer_expected_type) {
-      char *buf;
-      asprintf(&buf,
-               "invalid return type at: %s. \"%s\" does not match expected "
-               "\"%s\"\n",
-               lexer_span_to_string(ast->span), ret->return_value->type->name,
-               context->typer_expected_type->name);
-      fprintf(stderr, "%s\n", buf);
+      fprintf(
+          stderr,
+          "invalid return type at: %s. \"%s\" does not match expected \"%s\"\n",
+          lexer_span_to_string(ast->span), ret->return_value->type->name,
+          context->typer_expected_type->name);
       exit(1);
     }
   } else if (context->typer_expected_type) {
-    char *buf;
-    asprintf(&buf,
-             "invalid return type at: %s. this function must return a value."
-             "expected: \"%s\"\n",
-             lexer_span_to_string(ast->span),
-             context->typer_expected_type->name);
-    fprintf(stderr, "%s\n", buf);
+    fprintf(stderr,
+            "invalid return type at: %s. this function must return a "
+            "value.expected: \"%s\"\n",
+            lexer_span_to_string(ast->span),
+            context->typer_expected_type->name);
     exit(1);
   }
   return ret;
 }
 
 Thir *type_call(Ast *ast, Context *context) {
-  Binding *callee = get_binding(ast->call.callee, ast->span, context);
+  Binding *callee = get_binding(ast->call.callee, context);
+
+  if (!callee) {
+    use_of_undeclared("function", ast->call.callee, ast->span);
+  }
+
   Thir_Ptr_list arguments = {0};
   Function_Type *callee_type = (Function_Type *)callee->type;
 
@@ -512,13 +509,11 @@ Thir *type_call(Ast *ast, Context *context) {
 
   unsigned n_params = function->function.parameters.length;
   if (n_params != arguments.length) {
-    char *buf;
-    asprintf(&buf,
-             "invalid call at %s: too %s arguments. expected %d, but got %d.",
-             lexer_span_to_string(ast->span),
-             n_params > arguments.length ? "few" : "many", n_params,
-             arguments.length);
-    fprintf(stderr, "%s\n", buf);
+    fprintf(stderr,
+            "invalid call at %s: too %s arguments. expected %d, but got %d.\n",
+            lexer_span_to_string(ast->span),
+            n_params > arguments.length ? "few" : "many", n_params,
+            arguments.length);
     exit(1);
   }
 
@@ -534,10 +529,8 @@ Thir *type_call(Ast *ast, Context *context) {
 Type *get_type_from_ast_type(Ast *ast, Context *context) {
   Type *type;
   if (!try_find_type(context, ast->type.path, &type)) {
-    char *buf;
-    asprintf(&buf, "undeclared type: '%s' at: %s", ast->type.path,
-             lexer_span_to_string(ast->span));
-    fprintf(stderr, "%s\n", buf);
+    fprintf(stderr, "undeclared type: '%s' at: %s\n", ast->type.path,
+            lexer_span_to_string(ast->span));
     exit(1);
   }
   return type;
@@ -549,11 +542,9 @@ Thir *type_variable(Ast *ast, Context *context) {
   Thir *initializer = nullptr;
 
   if (!ast->variable.type) {
-    char *buf;
-    asprintf(&buf, "un-typed variables not allowed: %d, at: %s",
-             ast->variable.initializer->tag,
-             lexer_span_to_string(ast->variable.initializer->span));
-    fprintf(stderr, "%s\n", buf);
+    fprintf(stderr, "un-typed variables not allowed: %d, at: %s\n",
+            ast->variable.initializer->tag,
+            lexer_span_to_string(ast->variable.initializer->span));
     exit(1);
   }
 
@@ -565,20 +556,17 @@ Thir *type_variable(Ast *ast, Context *context) {
     initializer = type_expression(ast->variable.initializer, context);
     context->typer_expected_type = old_expected;
   } else {
-    char *buf;
-    asprintf(&buf, "uninitialized variables not allowed: %d, at: %s",
-             ast->variable.initializer->tag,
-             lexer_span_to_string(ast->variable.initializer->span));
-    fprintf(stderr, "%s\n", buf);
+    fprintf(stderr, "uninitialized variables not allowed: %d, at: %s\n",
+            ast->variable.initializer->tag,
+            lexer_span_to_string(ast->variable.initializer->span));
     exit(1);
   }
 
   if (initializer->type != type) {
-    char *buf;
-    asprintf(
-        &buf, "invalid type in declaration at: %s, expected %s, but got %s.",
-        lexer_span_to_string(ast->span), type->name, initializer->type->name);
-    fprintf(stderr, "%s\n", buf);
+    fprintf(stderr,
+            "invalid type in declaration at: %s, expected %s, but got %s.\n",
+            lexer_span_to_string(ast->span), type->name,
+            initializer->type->name);
     exit(1);
   }
 
@@ -622,25 +610,20 @@ Thir *type_aggregate_initializer(Ast *ast, Context *context) {
       LIST_FOREACH(struct_type->members, member) {
         // off-by-one: when __i == value_types.length, we've run out of values
         if (value_types.length <= __i) {
-          char *buf;
-          asprintf(&buf,
-                   "too few values provided for aggregate initializer at: %s, "
-                   "expected: %d, got: %d",
-                   lexer_span_to_string(ast->span), struct_type->members.length,
-                   value_types.length);
-          fprintf(stderr, "%s\n", buf);
+          fprintf(stderr,
+                  "too few values provided for aggregate initializer at: %s, "
+                  "expected: %d, got: %d\n",
+                  lexer_span_to_string(ast->span), struct_type->members.length,
+                  value_types.length);
           exit(1);
         }
         if (value_types.data[__i] != member.type) {
-          char *buf;
-          asprintf(
-              &buf,
-              "invalid type in aggregate initializer at: %s, expected %s, "
-              "got %s. (aggregate initializers must match the layout of the "
-              "struct when used without keys)",
-              lexer_span_to_string(ast->span), member.type->name,
-              value_types.data[__i]->name);
-          fprintf(stderr, "%s\n", buf);
+          fprintf(stderr,
+                  "invalid type in aggregate initializer at: %s, expected %s, "
+                  "got %s. (aggregate initializers must match the layout of "
+                  "the struct when used without keys)\n",
+                  lexer_span_to_string(ast->span), member.type->name,
+                  value_types.data[__i]->name);
           exit(1);
         }
         LIST_PUSH(keys, member.name);
@@ -663,14 +646,12 @@ Thir *type_aggregate_initializer(Ast *ast, Context *context) {
         for (unsigned int j = 0; j < struct_type->members.length; ++j) {
           if (strcmp(struct_type->members.data[j].name, key) == 0) {
             if (value_types.data[i] != struct_type->members.data[j].type) {
-              char *buf;
-              asprintf(&buf,
-                       "invalid type for key '%s' in aggregate initializer at: "
-                       "%s, expected %s, got %s.",
-                       key, lexer_span_to_string(ast->span),
-                       struct_type->members.data[j].type->name,
-                       value_types.data[i]->name);
-              fprintf(stderr, "%s\n", buf);
+              fprintf(stderr,
+                      "invalid type for key '%s' in aggregate initializer at: "
+                      "%s, expected %s, got %s.\n",
+                      key, lexer_span_to_string(ast->span),
+                      struct_type->members.data[j].type->name,
+                      value_types.data[i]->name);
               exit(1);
             }
             found = 1;
@@ -678,10 +659,8 @@ Thir *type_aggregate_initializer(Ast *ast, Context *context) {
           }
         }
         if (!found) {
-          char *buf;
-          asprintf(&buf, "unknown key '%s' in aggregate initializer at: %s",
-                   key, lexer_span_to_string(ast->span));
-          fprintf(stderr, "%s\n", buf);
+          fprintf(stderr, "unknown key '%s' in aggregate initializer at: %s\n",
+                  key, lexer_span_to_string(ast->span));
           exit(1);
         }
       }
@@ -719,12 +698,10 @@ Thir *type_aggregate_initializer(Ast *ast, Context *context) {
       return thir;
     }
   } else {
-    char *buf;
-    asprintf(&buf,
-             "currently unsupported type for multi-value aggregate "
-             "initializers at %s, type \"%s\"",
-             lexer_span_to_string(ast->span), type->name);
-    fprintf(stderr, "%s\n", buf);
+    fprintf(stderr,
+            "currently unsupported type for multi-value aggregate initializers "
+            "at %s, type \"%s\"\n",
+            lexer_span_to_string(ast->span), type->name);
     exit(1);
   }
 }

@@ -70,6 +70,8 @@ typedef enum {
   TOKEN_BIT_OR,
   TOKEN_BIT_NOT,
 
+  TOKEN_PERCENT,
+
   TOKEN_LBRACKET,
   TOKEN_RBRACKET,
 } Token_Type;
@@ -399,6 +401,9 @@ static inline Token lexer_gettok(Lexer *lexer) {
         break;
       case '~':
         type = TOKEN_BIT_NOT;
+        break;
+      case '%':
+        type = TOKEN_PERCENT;
         break;
       case '+':
         type = TOKEN_PLUS;

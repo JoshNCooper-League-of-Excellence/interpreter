@@ -37,6 +37,7 @@ typedef enum {
   OP_LOGICAL_NOT,
   OP_BIT_NOT,
   OP_INDEX,
+  OP_MODULO,
 
   OP_JUMP_IF,
   OP_JUMP,
@@ -124,6 +125,9 @@ void module_init(Module *m, Context *context);
 
 #define EMIT_ADD(buf, dest, l, r)                                              \
   EMIT(buf, MAKE_INSTR3(OP_ADD, (dest), (l), (r)))
+
+#define EMIT_MODULO(buf, dest, l, r)                                              \
+  EMIT(buf, MAKE_INSTR3(OP_MODULO, (dest), (l), (r)))
 
 #define EMIT_SUB(buf, dest, l, r)                                              \
   EMIT(buf, MAKE_INSTR3(OP_SUB, (dest), (l), (r)))

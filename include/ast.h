@@ -18,7 +18,7 @@ typedef enum {
   PREC_RELATIONAL,  // < > <= >=
   PREC_SHIFT,       // << >>
   PREC_TERM,        // + -
-  PREC_FACTOR,      // * /
+  PREC_FACTOR,      // * / %
   PREC_POSTFIX,
   PREC_UNARY,   // ! ~ - + ^
   PREC_PRIMARY, // literals, identifiers
@@ -32,6 +32,7 @@ typedef enum {
 
 typedef enum {
   OPERATOR_NONE = 0,
+  OPERATOR_MODULO,
   OPERATOR_DEREFERENCE,
   OPERATOR_ADDRESS_OF,
   OPERATOR_NEGATE,
@@ -134,8 +135,9 @@ static inline const char *operator_to_string(Operator op) {
     return "[]";
   case OPERATOR_XOR:
     return "^";
-  default:
-    return "<unknown>";
+  case OPERATOR_MODULO:
+    return "%";
+    break;
   }
 }
 

@@ -183,6 +183,13 @@ Ast *parse_postfix(Lexer *lexer, Context *context) {
     member_access->member_access.member = member.value;
     operand = member_access;
   }
+
+  if (operand->tag == AST_IDENTIFIER && lexer_next(lexer) == TOKEN_LPAREN) {
+    Ast *call = parse_call(operand->identifier, lexer, context);
+    free(operand);
+    operand = call;
+  }
+
   return operand;
 }
 
@@ -210,9 +217,6 @@ Ast *parse_primary(Lexer *lexer, Context *context) {
   }
   case TOKEN_IDENTIFIER: {
     lexer_eat(lexer);
-    if (lexer_next_is(lexer, TOKEN_LPAREN)) {
-      return parse_call(peeked.value, lexer, context);
-    }
     END_SPAN()
     Ast *ident = ast_alloc(context, AST_IDENTIFIER, span);
     ident->identifier = peeked.value;
@@ -246,7 +250,7 @@ Ast *parse_primary(Lexer *lexer, Context *context) {
 Ast *parse_unary(Lexer *lexer, Context *context) {
   BEGIN_SPAN(lexer_peek(lexer));
   Ast *error = NULL;
-  Operator op = parse_operator(lexer, context, EXPR_UNARY, &error);
+  Operator op = parse_operator(lexer, EXPR_UNARY);
   bool is_valid_operator = (op != OPERATOR_NONE);
 
   if (error) {
@@ -266,18 +270,28 @@ Ast *parse_unary(Lexer *lexer, Context *context) {
 Ast *parse_binary(Lexer *lexer, Context *context, Precedence precedence) {
   BEGIN_SPAN(lexer_peek(lexer));
   Ast *left = OK(parse_unary(lexer, context));
-  while (true) {
-    Ast *error = nullptr;
-    Operator operator = parse_operator(lexer, context, EXPR_BINARY, &error);
 
-    if (error) {
-      return error;
+  static Operator cached_operator = {0};
+  static bool use_cached_operator = false;
+
+  while (true) {
+    Operator operator;
+
+    if (use_cached_operator) {
+      operator = cached_operator;
+      use_cached_operator = false;
+    } else {
+      operator = parse_operator(lexer, EXPR_BINARY);
     }
 
     bool is_valid_operator = false;
     Precedence op_prec = get_precedence(operator, &is_valid_operator);
 
     if (op_prec < precedence || !is_valid_operator) {
+      if (is_valid_operator) {
+        use_cached_operator = true;
+        cached_operator = operator;
+      }
       break;
     }
 
@@ -531,12 +545,18 @@ Ast *parse_struct(Lexer *lexer, Context *context) {
   return ast;
 }
 
-Operator parse_operator(Lexer *lexer, Context *context,
-                        Expression_Type expr_type, Ast **error) {
-  (void)context;
-  (void)error; // this function does not report errors
+Operator parse_operator(Lexer *lexer, Expression_Type expr_type) {
   Token tok = lexer_peek(lexer);
   Token next = lexer_lookahead(lexer, 1);
+
+  if ((tok.type == TOKEN_PLUS && next.type == TOKEN_PLUS) ||
+      (tok.type == TOKEN_MINUS && next.type == TOKEN_MINUS)) {
+    fprintf(stderr,
+            "the '++' and '--' are not supported. Use '+=' or '-=' instead. "
+            "(at %s)",
+            lexer_span_to_string(tok.span));
+    exit(1);
+  }
 
   switch (expr_type) {
   case EXPR_UNARY:
@@ -556,7 +576,7 @@ Operator parse_operator(Lexer *lexer, Context *context,
     case TOKEN_MINUS:
       lexer_eat(lexer);
       return OPERATOR_NEGATE;
-    case TOKEN_PLUS: /* unary + not supported */
+    case TOKEN_PLUS:
       return OPERATOR_NONE;
     default:
       return OPERATOR_NONE;
@@ -564,6 +584,9 @@ Operator parse_operator(Lexer *lexer, Context *context,
 
   case EXPR_BINARY:
     switch (tok.type) {
+    case TOKEN_PERCENT:
+      lexer_eat(lexer);
+      return OPERATOR_MODULO;
     case TOKEN_ASSIGN:
       lexer_eat(lexer);
       return OPERATOR_ASSIGN;
@@ -601,6 +624,7 @@ Operator parse_operator(Lexer *lexer, Context *context,
     case TOKEN_EQUALS:
       lexer_eat(lexer);
       return OPERATOR_EQUALS;
+
     case TOKEN_NOT_EQUALS:
       lexer_eat(lexer);
       return OPERATOR_NOT_EQUALS;
@@ -696,6 +720,7 @@ Operator parse_operator(Lexer *lexer, Context *context,
     return OPERATOR_NONE;
   }
 }
+
 Precedence get_precedence(Operator op, bool *is_valid_operator) {
   *is_valid_operator = true;
   switch (op) {
@@ -735,6 +760,7 @@ Precedence get_precedence(Operator op, bool *is_valid_operator) {
     return PREC_TERM;
   case OPERATOR_MUL:
   case OPERATOR_DIV:
+  case OPERATOR_MODULO:
     return PREC_FACTOR;
   case OPERATOR_LOGICAL_NOT:
   case OPERATOR_BIT_NOT:

@@ -166,11 +166,8 @@ int lower_get_lvalue_value(Thir *lhs, Function *fn, Module *m) {
     return tmp;
   }
   default: {
-    char *msg;
-    asprintf(&msg, "lower_get_lvalue_value: unsupported lvalue tag %d at %s",
+    fprintf(stderr, "lower_get_lvalue_value: unsupported lvalue tag %d at %s",
              lhs->tag, lexer_span_to_string(lhs->span));
-    fprintf(stderr, "%s\n", msg);
-    free(msg);
     exit(EXIT_FAILURE);
   }
   }
@@ -185,11 +182,8 @@ void lower_set_lvalue_value(Thir *lhs, int value, Function *fn) {
     EMIT_STORE(fn->code, (int)lhs->binding->index, value);
     return;
   default: {
-    char *msg;
-    asprintf(&msg, "lower_set_lvalue_value: unsupported lvalue tag %d at %s",
+    fprintf(stderr, "lower_set_lvalue_value: unsupported lvalue tag %d at %s",
              lhs->tag, lexer_span_to_string(lhs->span));
-    fprintf(stderr, "%s\n", msg);
-    free(msg);
     exit(EXIT_FAILURE);
   }
   }
@@ -202,11 +196,8 @@ int lower_lvalue_slot(Thir *n) {
   case THIR_VARIABLE:
     return (int)n->binding->index;
   default:
-    char *msg;
-    asprintf(&msg, "lower_lvalue: unsupported lvalue tag %d at %s", n->tag,
+    fprintf(stderr, "lower_lvalue: unsupported lvalue tag %d at %s", n->tag,
              lexer_span_to_string(n->span));
-    fprintf(stderr, "%s\n", msg);
-    free(msg);
     exit(EXIT_FAILURE);
   }
 }
@@ -290,6 +281,9 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
     int dest = generate_temp(fn);
 
     switch (n->binary.op) {
+    case OPERATOR_MODULO: 
+      EMIT_MODULO(fn->code, dest, l, r);
+      break;
     case OPERATOR_ADD:
       EMIT_ADD(fn->code, dest, l, r);
       break;

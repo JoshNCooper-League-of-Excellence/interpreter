@@ -129,340 +129,336 @@ void vm_execute(Module *m) {
   Stack_Frame *sf = &call_stack[sp];
   Instr instr;
 
-  const static void *dispatch[] = {
-      [OP_ALLOCA] = &&L_ALLOCA,
-      [OP_MEMBER_LOAD] = &&L_MEMBER_LOAD,
-      [OP_MEMBER_STORE] = &&L_MEMBER_STORE,
-      [OP_CONST] = &&L_CONST,
-      [OP_LOAD] = &&L_LOAD,
-      [OP_STORE] = &&L_STORE,
-      [OP_ADD] = &&L_ADD,
-      [OP_SUB] = &&L_SUB,
-      [OP_MUL] = &&L_MUL,
-      [OP_DIV] = &&L_DIV,
-      [OP_PUSH] = &&L_PUSH,
-      [OP_CALL_EXTERN] = &&L_CALL_EXTERN,
-      [OP_CALL] = &&L_CALL,
-      [OP_RET] = &&L_RET,
-      [OP_NEGATE] = &&L_NEGATE,
-      [OP_LOGICAL_OR] = &&L_LOGICAL_OR,
-      [OP_LOGICAL_AND] = &&L_LOGICAL_AND,
-      [OP_SHIFT_LEFT] = &&L_SHIFT_LEFT,
-      [OP_SHIFT_RIGHT] = &&L_SHIFT_RIGHT,
-      [OP_XOR] = &&L_XOR,
-      [OP_BIT_OR] = &&L_BIT_OR,
-      [OP_BIT_AND] = &&L_BIT_AND,
-      [OP_EQUALS] = &&L_EQUALS,
-      [OP_LESS] = &&L_LESS,
-      [OP_GREATER] = &&L_GREATER,
-      [OP_LOGICAL_NOT] = &&L_LOGICAL_NOT,
-      [OP_BIT_NOT] = &&L_BIT_NOT,
-      [OP_INDEX] = &&L_INDEX,
-      [OP_JUMP] = &&L_JUMP,
-      [OP_JUMP_IF] = &&L_JUMP_IF,
-  };
+  for (;;) {
+    if (sf->ip >= sf->fn->code.length) {
+      goto L_RETURN_TO_CALLER;
+    }
+    instr = sf->fn->code.data[sf->ip++];
 
-  goto L_FUNCTION_ENTRY;
+    switch (instr.op) {
+    case OP_ALLOCA: {
+      integer dest = instr.a;
+      integer ty_idx = instr.b;
+      if (ty_idx < 0 || (unsigned)ty_idx >= m->types.length) {
+        VM_ERRF("invalid type index %lld", ty_idx);
+      }
+      sf->locals[dest] = default_value_of_type(m->types.data[ty_idx], sf->uid);
+      continue;
+    }
 
-L_FUNCTION_ENTRY:
-  FETCH();
+    case OP_MEMBER_LOAD: {
+      integer dest = instr.a;
+      integer struct_slot = instr.b;
+      integer member_idx = instr.c;
+      Value *struct_val = &sf->locals[struct_slot];
+      if (struct_val->type != VALUE_STRUCT) {
+        VM_ERRF("OP_MEMBER_LOAD: value at slot %lld is not a struct",
+                struct_slot);
+      }
+      if (member_idx < 0 || (size_t)member_idx >= struct_val->$struct.length) {
+        VM_ERRF("OP_MEMBER_LOAD: invalid member index %lld", member_idx);
+      }
+      sf->locals[dest] = struct_val->$struct.members[member_idx];
+      continue;
+    }
 
-L_ALLOCA: {
-  integer dest = instr.a;
-  integer ty_idx = instr.b;
-  if (ty_idx < 0 || (unsigned)ty_idx >= m->types.length) {
-    VM_ERRF("invalid type index %lld", ty_idx);
-  }
-  sf->locals[dest] = default_value_of_type(m->types.data[ty_idx], sf->uid);
-  FETCH();
-}
+    case OP_MEMBER_STORE: {
+      integer struct_slot = instr.a;
+      integer member_idx = instr.b;
+      integer src = instr.c;
+      Value *struct_val = &sf->locals[struct_slot];
+      if (struct_val->type != VALUE_STRUCT) {
+        VM_ERRF("OP_MEMBER_STORE: value at slot %lld is not a struct",
+                struct_slot);
+      }
+      if (member_idx < 0 || (size_t)member_idx >= struct_val->$struct.length) {
+        VM_ERRF("OP_MEMBER_STORE: invalid member index %lld", member_idx);
+      }
+      struct_val->$struct.members[member_idx] = sf->locals[src];
+      continue;
+    }
 
-L_MEMBER_LOAD: {
-  integer dest = instr.a;
-  integer struct_slot = instr.b;
-  integer member_idx = instr.c;
-  Value *struct_val = &sf->locals[struct_slot];
-  if (struct_val->type != VALUE_STRUCT) {
-    VM_ERRF("OP_MEMBER_LOAD: value at slot %lld is not a struct", struct_slot);
-  }
-  if (member_idx < 0 || (size_t)member_idx >= struct_val->$struct.length) {
-    VM_ERRF("OP_MEMBER_LOAD: invalid member index %lld", member_idx);
-  }
-  sf->locals[dest] = struct_val->$struct.members[member_idx];
-  FETCH();
-}
+    case OP_CONST: {
+      integer dest = instr.a;
+      integer cidx = instr.b;
+      sf->locals[dest] = constants[cidx];
+      continue;
+    }
 
-L_MEMBER_STORE: {
-  integer struct_slot = instr.a;
-  integer member_idx = instr.b;
-  integer src = instr.c;
-  Value *struct_val = &sf->locals[struct_slot];
-  if (struct_val->type != VALUE_STRUCT) {
-    VM_ERRF("OP_MEMBER_STORE: value at slot %lld is not a struct", struct_slot);
-  }
-  if (member_idx < 0 || (size_t)member_idx >= struct_val->$struct.length) {
-    VM_ERRF("OP_MEMBER_STORE: invalid member index %lld", member_idx);
-  }
-  struct_val->$struct.members[member_idx] = sf->locals[src];
-  FETCH();
-}
+    case OP_LOAD: {
+      integer dest = instr.a;
+      integer slot = instr.b;
+      sf->locals[dest] = sf->locals[slot];
+      continue;
+    }
 
-L_CONST: {
-  integer dest = instr.a;
-  integer cidx = instr.b;
-  sf->locals[dest] = constants[cidx];
-  FETCH();
-}
+    case OP_STORE: {
+      integer slot = instr.a;
+      integer src = instr.b;
+      sf->locals[slot] = sf->locals[src];
+      continue;
+    }
 
-L_LOAD: {
-  integer dest = instr.a;
-  integer slot = instr.b;
-  sf->locals[dest] = sf->locals[slot];
-  FETCH();
-}
+    case OP_ADD: {
+      integer d = instr.a, l = instr.b, r = instr.c;
+      sf->locals[d].integer = sf->locals[l].integer + sf->locals[r].integer;
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
 
-L_STORE: {
-  integer slot = instr.a;
-  integer src = instr.b;
-  sf->locals[slot] = sf->locals[src];
-  FETCH();
-}
+    case OP_SUB: {
+      integer d = instr.a, l = instr.b, r = instr.c;
+      sf->locals[d].integer = sf->locals[l].integer - sf->locals[r].integer;
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
 
-L_ADD: {
-  integer d = instr.a, l = instr.b, r = instr.c;
-  sf->locals[d].integer = sf->locals[l].integer + sf->locals[r].integer;
-  sf->locals[d].type = VALUE_INTEGER;
-  FETCH();
-}
+    case OP_MUL: {
+      integer d = instr.a, l = instr.b, r = instr.c;
+      sf->locals[d].integer = sf->locals[l].integer * sf->locals[r].integer;
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
 
-L_SUB: {
-  integer d = instr.a, l = instr.b, r = instr.c;
-  sf->locals[d].integer = sf->locals[l].integer - sf->locals[r].integer;
-  sf->locals[d].type = VALUE_INTEGER;
-  FETCH();
-}
+    case OP_DIV: {
+      integer d = instr.a, l = instr.b, r = instr.c;
+      integer rvalue = sf->locals[r].integer;
+      if (rvalue == 0) {
+        VM_ERRF("attempted to divide by zero. (div) ip=%d, fn=%s", sf->ip, sf->fn->name);
+      }
+      sf->locals[d].integer = sf->locals[l].integer / rvalue;
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
 
-L_MUL: {
-  integer d = instr.a, l = instr.b, r = instr.c;
-  sf->locals[d].integer = sf->locals[l].integer * sf->locals[r].integer;
-  sf->locals[d].type = VALUE_INTEGER;
-  FETCH();
-}
+    case OP_PUSH: {
+      integer src = instr.a;
+      arg_stack[arg_p++] = sf->locals[src];
+      continue;
+    }
 
-L_DIV: {
-  integer d = instr.a, l = instr.b, r = instr.c;
-  sf->locals[d].integer = sf->locals[l].integer / sf->locals[r].integer;
-  sf->locals[d].type = VALUE_INTEGER;
-  FETCH();
-}
+    case OP_CALL_EXTERN: {
+      integer dest = instr.a;
+      integer func_idx = instr.b;
+      integer nargs = instr.c;
 
-L_PUSH: {
-  integer src = instr.a;
-  arg_stack[arg_p++] = sf->locals[src];
-  FETCH();
-}
+      if (func_idx < 0 || (unsigned)func_idx >= CACHED_EXTERNS.length) {
+        VM_ERRF("invalid extern index %lld", func_idx);
+      }
+      Extern_Function callee = CACHED_EXTERNS.data[func_idx];
 
-L_CALL_EXTERN: {
-  integer dest = instr.a;
-  integer func_idx = instr.b;
-  integer nargs = instr.c;
+      integer base = arg_p - nargs;
+      if (base < 0) {
+        VM_ERRF("not enough arguments on arg stack for extern call (need=%lld "
+                "have=%lld)",
+                nargs, arg_p);
+      }
 
-  if (func_idx < 0 || (unsigned)func_idx >= CACHED_EXTERNS.length) {
-    VM_ERRF("invalid extern index %lld", func_idx);
-  }
-  Extern_Function callee = CACHED_EXTERNS.data[func_idx];
+      Value value = libffi_dynamic_dispatch(callee, &arg_stack[base], nargs);
+      arg_p = base; // pop
+      sf->locals[dest] = value;
 
-  integer base = arg_p - nargs;
-  if (base < 0) {
-    VM_ERRF(
-        "not enough arguments on arg stack for extern call (need=%lld have=%lld)",
-        nargs, arg_p);
-  }
+      continue;
+    }
 
-  Value value = libffi_dynamic_dispatch(callee, &arg_stack[base], nargs);
-  arg_p = base; // pop
-  sf->locals[dest] = value;
+    case OP_CALL: {
+      integer dest = instr.a;
+      integer func_idx = instr.b;
+      integer nargs = instr.c;
 
-  FETCH();
-}
+      if (func_idx < 0 || (unsigned)func_idx >= m->functions.length) {
+        VM_ERRF("invalid function index %lld", func_idx);
+      }
+      Function *callee = m->functions.data[func_idx];
 
-L_CALL: {
-  integer dest = instr.a;
-  integer func_idx = instr.b;
-  integer nargs = instr.c;
+      if (sp + 1 >= (int)(sizeof(call_stack) / sizeof(call_stack[0]))) {
+        VM_ERRF("call stack overflow");
+      }
 
-  if (func_idx < 0 || (unsigned)func_idx >= m->functions.length) {
-    VM_ERRF("invalid function index %lld", func_idx);
-  }
-  Function *callee = m->functions.data[func_idx];
-
-  if (sp + 1 >= (int)(sizeof(call_stack) / sizeof(call_stack[0]))) {
-    VM_ERRF("call stack overflow");
-  }
-
-  integer base = arg_p - nargs;
-  if (base < 0) {
-    VM_ERRF("not enough arguments on arg stack for call (need=%lld have=%lld)",
+      integer base = arg_p - nargs;
+      if (base < 0) {
+        VM_ERRF(
+            "not enough arguments on arg stack for call (need=%lld have=%lld)",
             nargs, arg_p);
+      }
+
+      integer new_sp = sp + 1;
+      call_stack[new_sp] = enter(callee, dest, sp);
+      for (integer i = 0; i < nargs; ++i) {
+        call_stack[new_sp].locals[i] = arg_stack[base + i];
+      }
+      arg_p = base; // pop args
+      sp = new_sp;
+      sf = &call_stack[sp];
+
+      continue;
+    }
+
+    case OP_RET: {
+      integer src = instr.a;
+      Value rv = {.type = VALUE_VOID};
+      if (src >= 0) {
+        rv = sf->locals[src];
+      }
+      integer caller_idx = sf->caller;
+      integer ret_dest = sf->ret_dest;
+      leave(sf);
+      if (caller_idx == ENTRY_POINT_CALLER) {
+        goto L_EXIT;
+      }
+      sp = caller_idx;
+      sf = &call_stack[sp];
+      if (ret_dest >= 0) {
+        sf->locals[ret_dest] = rv;
+      }
+      continue;
+    }
+
+    case OP_NEGATE: {
+      integer dest = instr.a, src = instr.b;
+      sf->locals[dest].integer = -sf->locals[src].integer;
+      sf->locals[dest].type = VALUE_INTEGER;
+      continue;
+    }
+
+    case OP_LOGICAL_OR: {
+      integer d = instr.a, l = instr.b, r = instr.c;
+      sf->locals[d].integer = (sf->locals[l].integer || sf->locals[r].integer);
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
+
+    case OP_LOGICAL_AND: {
+      integer d = instr.a, l = instr.b, r = instr.c;
+      sf->locals[d].integer = (sf->locals[l].integer && sf->locals[r].integer);
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
+
+    case OP_SHIFT_LEFT: {
+      integer d = instr.a, l = instr.b, r = instr.c;
+      sf->locals[d].integer = (sf->locals[l].integer << sf->locals[r].integer);
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
+
+    case OP_SHIFT_RIGHT: {
+      integer d = instr.a, l = instr.b, r = instr.c;
+      sf->locals[d].integer = (sf->locals[l].integer >> sf->locals[r].integer);
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
+
+    case OP_XOR: {
+      integer d = instr.a, l = instr.b, r = instr.c;
+      sf->locals[d].integer = (sf->locals[l].integer ^ sf->locals[r].integer);
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
+
+    case OP_BIT_OR: {
+      integer d = instr.a, l = instr.b, r = instr.c;
+      sf->locals[d].integer = (sf->locals[l].integer | sf->locals[r].integer);
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
+
+    case OP_BIT_AND: {
+      integer d = instr.a, l = instr.b, r = instr.c;
+      sf->locals[d].integer = (sf->locals[l].integer & sf->locals[r].integer);
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
+
+    case OP_MODULO: {
+      integer d = instr.a, l = instr.b, r = instr.c;
+      integer rvalue = sf->locals[r].integer;
+      if (rvalue == 0) {
+        VM_ERRF("attempted to divide by zero. (modulo) ip=%d, fn=%s", sf->ip, sf->fn->name);
+      }
+      sf->locals[d].integer = (sf->locals[l].integer % rvalue);
+      sf->locals[d].type = VALUE_INTEGER;
+    }
+
+    case OP_EQUALS: {
+      integer d = instr.a, l = instr.b, r = instr.c;
+      sf->locals[d].integer = (sf->locals[l].integer == sf->locals[r].integer);
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
+
+    case OP_NOT_EQUALS: {
+      integer d = instr.a, l = instr.b, r = instr.c;
+      sf->locals[d].integer = (sf->locals[l].integer != sf->locals[r].integer);
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
+
+    case OP_LESS: {
+      integer d = instr.a, l = instr.b, r = instr.c;
+      sf->locals[d].integer = (sf->locals[l].integer < sf->locals[r].integer);
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
+
+    case OP_GREATER: {
+      integer d = instr.a, l = instr.b, r = instr.c;
+      sf->locals[d].integer = (sf->locals[l].integer > sf->locals[r].integer);
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
+
+    case OP_LOGICAL_NOT: {
+      integer d = instr.a, s = instr.b;
+      sf->locals[d].integer = !sf->locals[s].integer;
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
+
+    case OP_BIT_NOT: {
+      integer d = instr.a, s = instr.b;
+      sf->locals[d].integer = ~sf->locals[s].integer;
+      sf->locals[d].type = VALUE_INTEGER;
+      continue;
+    }
+
+    case OP_INDEX:
+      VM_ERRF("[...] index operations not implemented");
+
+    case OP_JUMP_IF: {
+      integer cond = instr.a;
+      integer target = instr.b;
+      if (sf->locals[cond].integer) {
+        sf->ip += target;
+      }
+      continue;
+    }
+
+    case OP_JUMP: {
+      integer target = instr.a;
+      sf->ip += target;
+      continue;
+    }
+    }
+
+  L_RETURN_TO_CALLER:
+    // Ran off the end without an explicit return
+    if (sf->caller == ENTRY_POINT_CALLER) {
+      goto L_EXIT;
+    }
+    {
+      Value rv = sf->locals[0];
+      integer caller_idx = sf->caller;
+      integer dest = sf->ret_dest;
+      leave(sf);
+      sp = caller_idx;
+      sf = &call_stack[sp];
+      if (dest >= 0) {
+        sf->locals[dest] = rv;
+      }
+    }
+    continue;
   }
-
-  integer new_sp = sp + 1;
-  call_stack[new_sp] = enter(callee, dest, sp);
-  for (integer i = 0; i < nargs; ++i) {
-    call_stack[new_sp].locals[i] = arg_stack[base + i];
-  }
-  arg_p = base; // pop args
-  sp = new_sp;
-  sf = &call_stack[sp];
-
-  FETCH();
-}
-
-L_RET: {
-  integer src = instr.a;
-  Value rv = {.type = VALUE_VOID};
-  if (src >= 0) {
-    rv = sf->locals[src];
-  }
-  integer caller_idx = sf->caller;
-  integer ret_dest = sf->ret_dest;
-  leave(sf);
-  if (caller_idx == ENTRY_POINT_CALLER) {
-    goto L_EXIT;
-  }
-  sp = caller_idx;
-  sf = &call_stack[sp];
-  if (ret_dest >= 0) {
-    sf->locals[ret_dest] = rv;
-  }
-  FETCH();
-}
-
-L_RETURN_TO_CALLER: {
-  // Ran off the end without an explicit return
-  if (sf->caller == ENTRY_POINT_CALLER) {
-    goto L_EXIT;
-  }
-  Value rv = sf->locals[0];
-  integer caller_idx = sf->caller;
-  integer dest = sf->ret_dest;
-  leave(sf);
-  sp = caller_idx;
-  sf = &call_stack[sp];
-  if (dest >= 0) {
-    sf->locals[dest] = rv;
-  }
-  FETCH();
-}
-
-L_NEGATE: {
-  integer dest = instr.a, src = instr.b;
-  sf->locals[dest].integer = -sf->locals[src].integer;
-  sf->locals[dest].type = VALUE_INTEGER;
-  FETCH();
-}
-
-L_LOGICAL_OR: {
-  integer d = instr.a, l = instr.b, r = instr.c;
-  sf->locals[d].integer = (sf->locals[l].integer || sf->locals[r].integer);
-  sf->locals[d].type = VALUE_INTEGER;
-  FETCH();
-}
-
-L_LOGICAL_AND: {
-  integer d = instr.a, l = instr.b, r = instr.c;
-  sf->locals[d].integer = (sf->locals[l].integer && sf->locals[r].integer);
-  sf->locals[d].type = VALUE_INTEGER;
-  FETCH();
-}
-
-L_SHIFT_LEFT: {
-  integer d = instr.a, l = instr.b, r = instr.c;
-  sf->locals[d].integer = (sf->locals[l].integer << sf->locals[r].integer);
-  sf->locals[d].type = VALUE_INTEGER;
-  FETCH();
-}
-
-L_SHIFT_RIGHT: {
-  integer d = instr.a, l = instr.b, r = instr.c;
-  sf->locals[d].integer = (sf->locals[l].integer >> sf->locals[r].integer);
-  sf->locals[d].type = VALUE_INTEGER;
-  FETCH();
-}
-
-L_XOR: {
-  integer d = instr.a, l = instr.b, r = instr.c;
-  sf->locals[d].integer = (sf->locals[l].integer ^ sf->locals[r].integer);
-  sf->locals[d].type = VALUE_INTEGER;
-  FETCH();
-}
-
-L_BIT_OR: {
-  integer d = instr.a, l = instr.b, r = instr.c;
-  sf->locals[d].integer = (sf->locals[l].integer | sf->locals[r].integer);
-  sf->locals[d].type = VALUE_INTEGER;
-  FETCH();
-}
-
-L_BIT_AND: {
-  integer d = instr.a, l = instr.b, r = instr.c;
-  sf->locals[d].integer = (sf->locals[l].integer & sf->locals[r].integer);
-  sf->locals[d].type = VALUE_INTEGER;
-  FETCH();
-}
-
-L_EQUALS: {
-  integer d = instr.a, l = instr.b, r = instr.c;
-  sf->locals[d].integer = (sf->locals[l].integer == sf->locals[r].integer);
-  sf->locals[d].type = VALUE_INTEGER;
-  FETCH();
-}
-
-L_LESS: {
-  integer d = instr.a, l = instr.b, r = instr.c;
-  sf->locals[d].integer = (sf->locals[l].integer < sf->locals[r].integer);
-  sf->locals[d].type = VALUE_INTEGER;
-  FETCH();
-}
-
-L_GREATER: {
-  integer d = instr.a, l = instr.b, r = instr.c;
-  sf->locals[d].integer = (sf->locals[l].integer > sf->locals[r].integer);
-  sf->locals[d].type = VALUE_INTEGER;
-  FETCH();
-}
-
-L_LOGICAL_NOT: {
-  integer d = instr.a, s = instr.b;
-  sf->locals[d].integer = !sf->locals[s].integer;
-  sf->locals[d].type = VALUE_INTEGER;
-  FETCH();
-}
-
-L_BIT_NOT: {
-  integer d = instr.a, s = instr.b;
-  sf->locals[d].integer = ~sf->locals[s].integer;
-  sf->locals[d].type = VALUE_INTEGER;
-  FETCH();
-}
-
-L_INDEX:
-  VM_ERRF("[...] index operations not implemented");
-
-L_JUMP_IF: {
-  integer cond = instr.a;
-  integer target = instr.b;
-  if (sf->locals[cond].integer) {
-    sf->ip += target;
-  }
-  FETCH();
-}
-
-L_JUMP: {
-  integer target = instr.a;
-  sf->ip += target;
-  FETCH();
-}
 
 L_EXIT:
   leave(&call_stack[0]);
