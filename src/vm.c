@@ -100,6 +100,12 @@ void vm_execute(Module *m) {
   }
 
   Stack_Frame call_stack[256];
+
+  for (int i = 0; i < 256; ++i) {
+    Stack_Frame *frame = &call_stack[i];
+    frame->uid = i;
+  }
+
   int sp = 0;
 
   Value arg_stack[64];
@@ -135,7 +141,7 @@ void vm_execute(Module *m) {
       if (ty_idx < 0 || (unsigned)ty_idx >= m->types.length) {
         VM_ERRF("invalid type index %d", ty_idx);
       }
-      sf->locals[dest] = default_value_of_type(m->types.data[ty_idx]);
+      sf->locals[dest] = default_value_of_type(m->types.data[ty_idx], sf->uid);
     } break;
     case OP_MEMBER_LOAD: {
       int dest = instr.a;
@@ -251,7 +257,6 @@ void vm_execute(Module *m) {
       int new_sp = sp + 1;
       call_stack[new_sp] = enter(callee, dest, sp);
       for (int i = 0; i < nargs; ++i) {
-        call_stack[new_sp].locals[i] = arg_stack[i];
         call_stack[new_sp].locals[i] = arg_stack[base + i];
       }
       arg_p = 0;
@@ -307,7 +312,7 @@ void print_value(Value *value, String_Builder *sb) {
   }
 }
 
-Value default_value_of_type(Type *type) {
+Value default_value_of_type(Type *type, unsigned owner_uid) {
   switch (type->tag) {
   case TYPE_INT: {
     return (Value){
@@ -323,13 +328,15 @@ Value default_value_of_type(Type *type) {
   }
   case TYPE_STRUCT: {
     Struct_Type *struct_type = (Struct_Type *)type;
-    Value v;
-    v.type = VALUE_STRUCT;
-    v.$struct.length = struct_type->members.length;
-    v.$struct.members = calloc(struct_type->members.length, sizeof(Value));
+    Value v = {
+        .owner_uid = owner_uid,
+        .type = VALUE_STRUCT,
+        .$struct.length = struct_type->members.length,
+        .$struct.members = calloc(struct_type->members.length, sizeof(Value)),
+    };
     for (size_t i = 0; i < struct_type->members.length; ++i) {
-      v.$struct.members[i] =
-          default_value_of_type(struct_type->members.data[i].type);
+      Type *type = struct_type->members.data[i].type;
+      v.$struct.members[i] = default_value_of_type(type, owner_uid);
     }
     return v;
   }
@@ -340,10 +347,10 @@ Value default_value_of_type(Type *type) {
   }
 }
 
-void value_free(Value *value) {
-  if (value->type == VALUE_STRUCT) {
+void value_free(Value *value, unsigned owner_uid) {
+  if (value->type == VALUE_STRUCT && value->owner_uid != owner_uid) {
     for (unsigned i = 0; i < value->$struct.length; ++i) {
-      value_free(&value->$struct.members[i]);
+      value_free(&value->$struct.members[i], owner_uid);
     }
     free(value->$struct.members);
   }
@@ -357,7 +364,7 @@ void leave(Stack_Frame *frame) {
 
   for (int i = 0; i < frame->n_locals; ++i) {
     Value *value = &frame->locals[i];
-    value_free(value);
+    value_free(value, frame->uid);
   }
 }
 
@@ -492,7 +499,24 @@ Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc) {
       arg_values[i] = &v->string;
       break;
     default:
-      fprintf(stderr, "[VM:FFI] unsupported argument type for extern call\n");
+      char *type_name;
+      switch (v->type) {
+      case VALUE_VOID:
+        type_name = "void";
+        break;
+      case VALUE_STRUCT:
+        type_name = "struct";
+        break;
+      case VALUE_INTEGER:
+        type_name = "int";
+        break;
+      case VALUE_STRING:
+        type_name = "string";
+        break;
+      }
+      fprintf(stderr,
+              "[VM:FFI] unsupported argument type '%s' (%d) for extern call\n",
+              type_name, v->type);
       exit(1);
     }
   }

@@ -194,7 +194,6 @@ Ast *parse_primary(Lexer *lexer, Context *context) {
     if (lexer_next_is(lexer, TOKEN_LPAREN)) {
       return parse_call(peeked.value, lexer, context);
     }
-
     END_SPAN()
     Ast *ident = ast_alloc(context, AST_IDENTIFIER, span);
     ident->identifier = peeked.value;
@@ -259,7 +258,13 @@ Ast *parse_identifier(Lexer *lexer, Context *context) {
     return parse_function(lexer, context);
   } else if (one_ahead.type == TOKEN_LPAREN || one_ahead.type == TOKEN_ASSIGN || one_ahead.type == TOKEN_DOT) {
     return parse_expression(lexer, context); // Function call
-  } else {
+  } else if (one_ahead.type == TOKEN_LCURLY) {
+    Ast *type = parse_type(lexer, context);
+    Ast *initializer = parse_aggregate_initializer(lexer, context);
+    initializer->aggregate_initializer.annotated_type = type;
+    return initializer;
+  }
+  else {
     return parser_error(context, lexer_span(lexer),
                         "invalid identifier statement. expected variable or "
                         "function declaration",

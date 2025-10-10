@@ -19,6 +19,7 @@ typedef enum {
 } Value_Type;
 
 typedef struct Value {
+  unsigned owner_uid;
   Value_Type type;
   union {
     int integer;
@@ -31,7 +32,6 @@ typedef struct Value {
   };
 } Value;
 
-
 void print_value(Value *value, String_Builder *sb);
 
 #define VM_STACK_LENGTH 1024
@@ -43,13 +43,14 @@ typedef struct {
   unsigned ip;
   int ret_dest; /* caller temp index to store return, -1 = ignore */
   int caller;   /* index of caller frame in call_stack, -1 = none */
+  unsigned uid;
 } Stack_Frame;
 
 void vm_execute(Module *module);
 
 Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc);
 
-Value default_value_of_type(Type *type);
+Value default_value_of_type(Type *type, unsigned owner_id);
 
 void leave(Stack_Frame *frame);
 #endif // #ifndef VM_H

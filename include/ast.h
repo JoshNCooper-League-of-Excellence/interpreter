@@ -68,6 +68,7 @@ typedef struct Ast {
     struct {
       string_list keys;
       Ast_Ptr_list values;
+      struct Ast *annotated_type;
     } aggregate_initializer;
 
     struct {

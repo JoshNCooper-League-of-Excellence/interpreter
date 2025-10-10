@@ -1,6 +1,3 @@
-
-// extern printf :: (msg string, v int, v int) int;
-
 extern printf :: (string, int, int, int) int;
 
 struct Vec3 {
@@ -9,9 +6,13 @@ struct Vec3 {
   z int,
 }
 
+take_vec3 :: (v Vec3) void {
+  printf("[in take_vec3]: %d, %d, %d\n", v.x, v.y, v.z); 
+}
+
 main :: (args string) int {
-  Vec3 vec3 = { 20, 30, 40 };
-  vec3.x = 100;
-  printf("%d, %d, %d\n", vec3.x, vec3.y, vec3.z);
+  Vec3 v = { 0, 0, 0 };
+  take_vec3(v);
+  printf("[in take_vec3]: %d, %d, %d\n", v.x, v.y, v.z); 
   return 0;
 }

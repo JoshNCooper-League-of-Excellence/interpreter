@@ -41,7 +41,8 @@ Binding_Ptr_list typer_convert_parameters(Context *context,
 
     Binding binding = {.thir = thir_param,
                        .ast = nullptr,
-                       .name = param.name,
+                       .name =
+                           param.nameless ? "<nameless parameter>" : param.name,
                        .type = param_type};
 
     Binding_Ptr ptr = bind_variable(context, binding);
@@ -81,18 +82,25 @@ Binding *get_binding(const char *identifier, Span span, Context *context) {
       continue;
     }
 
-    if (thir->tag == THIR_VARIABLE) {
+    switch (thir->tag) {
+    case THIR_VARIABLE:
       if (strcmp(thir->binding->name, identifier) == 0) {
         return thir->binding;
       }
-    } else if (thir->tag == THIR_FUNCTION) {
+      break;
+    case THIR_FUNCTION:
       if (strcmp(thir->function.name, identifier) == 0) {
         return thir->binding;
       }
-    } else if (thir->tag == THIR_EXTERN) {
+      break;
+    case THIR_EXTERN:
       if (strcmp(thir->extern_function.name, identifier) == 0) {
         return thir->binding;
       }
+      break;
+      break;
+    default:
+      break;
     }
   }
 
@@ -256,7 +264,7 @@ Thir *type_literal(Ast *ast, Context *context) {
 }
 
 Thir *type_identifier(Ast *ast, Context *context) {
-  Binding *binding = get_binding(ast->variable.name, ast->span, context);
+  Binding *binding = get_binding(ast->identifier, ast->span, context);
 
   if (!binding) {
     char *buf;
@@ -421,9 +429,13 @@ Thir *type_return(Ast *ast, Context *context) {
 Thir *type_call(Ast *ast, Context *context) {
   Binding *callee = get_binding(ast->call.callee, ast->span, context);
   Thir_Ptr_list arguments = {0};
+  Function_Type *callee_type = (Function_Type *)callee->type;
 
   LIST_FOREACH(ast->call.arguments, ast_arg) {
+    Type *old_expected = context->typer_expected_type;
+    context->typer_expected_type = callee_type->parameters.data[__i];
     Thir *arg = type_expression(ast_arg, context);
+    context->typer_expected_type = old_expected;
     LIST_PUSH(arguments, arg);
   }
 
@@ -445,7 +457,6 @@ Thir *type_call(Ast *ast, Context *context) {
   call->call.arguments = arguments;
   call->call.callee = callee;
 
-  Function_Type *callee_type = (Function_Type *)callee->type;
   call->type = callee_type->returns; // Set our type to the return type.
 
   return call;
