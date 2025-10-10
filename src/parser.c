@@ -25,7 +25,7 @@ void print_ast_function_header(Ast *function) {
           &error_msg, "unexpected token at %s:%zu:%zu, expected %s, got %s\n", \
           lexer->filename, tok.span.line, tok.span.col,                        \
           token_type_to_string($expected), token_type_to_string(tok.type));    \
-      return parser_error(context, lexer_span(lexer), error_msg, true);        \
+      return parser_error(context, lexer_span(lexer), error_msg);              \
     }                                                                          \
     lexer_eat(lexer);                                                          \
   })
@@ -45,13 +45,11 @@ void print_ast_function_header(Ast *function) {
 
 #define END_SPAN() span.length = lexer_peek(lexer).span.start - span.start;
 
-Ast *parser_error(Context *context, Span span, const char *message,
-                  bool fatal) {
+Ast *parser_error(Context *context, Span span, const char *message) {
   fprintf(stderr, "%s:%zu:%zu: %s\n", CURRENTLY_COMPILING_FILE_NAME, span.line,
           span.col, message);
   Ast *ast = ast_alloc(context, AST_ERROR, span);
   ast->error.message = message;
-  ast->error.fatal = fatal;
   return ast;
 }
 
@@ -86,7 +84,7 @@ Ast *parse_program(Lexer *lexer, Context *context) {
       char *buf;
       asprintf(&buf, "Unexpected token %s at top level.",
                token_type_to_string(peeked));
-      return parser_error(context, lexer_span(lexer), buf, true);
+      return parser_error(context, lexer_span(lexer), buf);
       break;
     }
   }
@@ -129,7 +127,7 @@ Ast *parse_block(Lexer *lexer, Context *context) {
       break;
     case TOKEN_EOF:
       return parser_error(context, span,
-                          "Unexpected end of input while parsing block", true);
+                          "Unexpected end of input while parsing block");
     default:
       // easily propagate formatted error.
       // -2 doesn't exist.
@@ -186,6 +184,15 @@ Ast *parse_primary(Lexer *lexer, Context *context) {
   Token peeked = lexer_peek(lexer);
   BEGIN_SPAN(peeked);
   switch (peeked.type) {
+  case TOKEN_TRUE:
+  case TOKEN_FALSE: {
+    lexer_eat(lexer);
+    END_SPAN();
+    Ast *ast = ast_alloc(context, AST_LITERAL, span);
+    ast->literal.tag = AST_LITERAL_BOOL;
+    ast->literal.value = peeked.type == TOKEN_TRUE ? "true" : "false";
+    return ast;
+  }
   case TOKEN_LCURLY: {
     return parse_aggregate_initializer(lexer, context);
   }
@@ -203,7 +210,7 @@ Ast *parse_primary(Lexer *lexer, Context *context) {
     lexer_eat(lexer);
     END_SPAN()
     Ast *integer = ast_alloc(context, AST_LITERAL, span);
-    integer->literal.tag = INTEGER;
+    integer->literal.tag = AST_LITERAL_INTEGER;
     integer->literal.value = peeked.value;
     return integer;
   }
@@ -211,7 +218,7 @@ Ast *parse_primary(Lexer *lexer, Context *context) {
     lexer_eat(lexer);
     END_SPAN()
     Ast *integer = ast_alloc(context, AST_LITERAL, span);
-    integer->literal.tag = STRING;
+    integer->literal.tag = AST_LITERAL_STRING;
     integer->literal.value = peeked.value;
     return integer;
   }
@@ -220,56 +227,75 @@ Ast *parse_primary(Lexer *lexer, Context *context) {
     char *buf;
     asprintf(&buf, "unexpected token when parsing literal: %s",
              token_type_to_string(peeked.type));
-    return parser_error(context, span, buf, true);
+    return parser_error(context, span, buf);
   }
+}
+
+Ast *parse_unary(Lexer *lexer, Context *context) {
+  BEGIN_SPAN(lexer_peek(lexer));
+  Ast *error = NULL;
+  Operator op = parse_operator(lexer, context, EXPR_UNARY, &error);
+  bool is_valid_operator = (op != OPERATOR_NONE);
+
+  if (error) {
+    return error;
+  }
+
+  if (is_valid_operator) {
+    Ast *operand = OK(parse_unary(lexer, context));
+    Ast *unary = ast_alloc(context, AST_UNARY, span);
+    unary->unary.op = op;
+    unary->unary.operand = operand;
+    return unary;
+  }
+  return parse_postfix(lexer, context);
 }
 
 Ast *parse_binary(Lexer *lexer, Context *context, Precedence precedence) {
   BEGIN_SPAN(lexer_peek(lexer));
-  Ast *left = OK(parse_postfix(lexer, context));
+  Ast *left = OK(parse_unary(lexer, context));
   while (true) {
-    Token op = lexer_peek(lexer);
+    Ast *error = nullptr;
+    Operator operator = parse_operator(lexer, context, EXPR_BINARY, &error);
+
+    if (error) {
+      return error;
+    }
+
     bool is_valid_operator = false;
-    Precedence op_prec = get_precedence(op.type, &is_valid_operator);
+    Precedence op_prec = get_precedence(operator, &is_valid_operator);
 
     if (op_prec < precedence || !is_valid_operator) {
       break;
     }
 
-    lexer_eat(lexer);
     Ast *right = OK(parse_binary(lexer, context, op_prec + 1));
 
     END_SPAN();
     Ast *bin = ast_alloc(context, AST_BINARY, span);
     bin->binary.left = left;
     bin->binary.right = right;
-    bin->binary.op = op.type;
+    bin->binary.op = operator;
     left = bin;
   }
   return left;
 }
 
 Ast *parse_identifier(Lexer *lexer, Context *context) {
-  Token one_ahead = lexer_lookahead(lexer, 1);
-  Token two_ahead = lexer_lookahead(lexer, 2);
-  if (two_ahead.type == TOKEN_ASSIGN) {
+  // The peeked is ALWAYS an identifier here, so the other lookaheads are beyond that.
+  Token two_ahead = lexer_lookahead(lexer, 1);
+
+  // x int = ... variable declaration
+  if (two_ahead.type == TOKEN_IDENTIFIER) {
     return parse_variable(lexer, context);
-  } else if (two_ahead.type == TOKEN_COLON) {
+  }
+
+  // main :: ... functiond declaration
+  if (two_ahead.type == TOKEN_COLON) {
     return parse_function(lexer, context);
-  } else if (one_ahead.type == TOKEN_LPAREN || one_ahead.type == TOKEN_ASSIGN || one_ahead.type == TOKEN_DOT) {
-    return parse_expression(lexer, context); // Function call
-  } else if (one_ahead.type == TOKEN_LCURLY) {
-    Ast *type = parse_type(lexer, context);
-    Ast *initializer = parse_aggregate_initializer(lexer, context);
-    initializer->aggregate_initializer.annotated_type = type;
-    return initializer;
-  }
-  else {
-    return parser_error(context, lexer_span(lexer),
-                        "invalid identifier statement. expected variable or "
-                        "function declaration",
-                        true);
-  }
+  } 
+
+  return parse_expression(lexer, context);
 }
 
 Ast *parse_type(Lexer *lexer, Context *context) {
@@ -337,10 +363,11 @@ Ast *parse_function(Lexer *lexer, Context *context) {
     return NULL;
   }
 
-
   LIST_FOREACH(parameters, param) {
     if (param.nameless) {
-      return parser_error(context, span, "You cannot use nameless parameters in a function that is not extern", true);
+      return parser_error(context, span,
+                          "You cannot use nameless parameters in a function "
+                          "that is not extern");
     }
   }
 
@@ -384,8 +411,8 @@ Ast *parse_extern(Lexer *lexer, Context *context) {
 
 Ast *parse_variable(Lexer *lexer, Context *context) {
   BEGIN_SPAN(lexer_peek(lexer));
-  Ast *type = parse_type(lexer, context);
   Token name = EXPECT(TOKEN_IDENTIFIER);
+  Ast *type = parse_type(lexer, context);
   EXPECT(TOKEN_ASSIGN);
   Ast *expression = OK(parse_expression(lexer, context));
   END_SPAN();
@@ -466,4 +493,226 @@ Ast *parse_struct(Lexer *lexer, Context *context) {
   ast->$struct.members = members;
   ast->$struct.name = name_token.value;
   return ast;
+}
+
+Operator parse_operator(Lexer *lexer, Context *context,
+                        Expression_Type expr_type, Ast **error) {
+  (void)context;
+  (void)error; // this function does not report errors
+  Token tok = lexer_peek(lexer);
+  Token next = lexer_lookahead(lexer, 1);
+
+  switch (expr_type) {
+  case EXPR_UNARY:
+    switch (tok.type) {
+    case TOKEN_BIT_AND:
+      lexer_eat(lexer);
+      return OPERATOR_ADDRESS_OF;
+    case TOKEN_MUL:
+      lexer_eat(lexer);
+      return OPERATOR_DEREFERENCE;
+    case TOKEN_LOGICAL_NOT:
+      lexer_eat(lexer);
+      return OPERATOR_LOGICAL_NOT;
+    case TOKEN_BIT_NOT:
+      lexer_eat(lexer);
+      return OPERATOR_BIT_NOT;
+    case TOKEN_MINUS:
+      lexer_eat(lexer);
+      return OPERATOR_NEGATE;
+    case TOKEN_PLUS: /* unary + not supported */
+      return OPERATOR_NONE;
+    default:
+      return OPERATOR_NONE;
+    }
+
+  case EXPR_BINARY:
+    switch (tok.type) {
+    case TOKEN_ASSIGN:
+      lexer_eat(lexer);
+      return OPERATOR_ASSIGN;
+
+    case TOKEN_LOGICAL_OR:
+      lexer_eat(lexer);
+      return OPERATOR_LOGICAL_OR;
+    case TOKEN_LOGICAL_AND:
+      lexer_eat(lexer);
+      return OPERATOR_LOGICAL_AND;
+
+    case TOKEN_BIT_OR:
+      if (next.type == TOKEN_ASSIGN) {
+        lexer_eat(lexer);
+        lexer_eat(lexer);
+        return OPERATOR_BIT_OR_ASSIGN;
+      }
+      lexer_eat(lexer);
+      return OPERATOR_BIT_OR;
+
+    case TOKEN_BIT_AND:
+      if (next.type == TOKEN_ASSIGN) {
+        lexer_eat(lexer);
+        lexer_eat(lexer);
+        return OPERATOR_BIT_AND_ASSIGN;
+      }
+      lexer_eat(lexer);
+      return OPERATOR_BIT_AND;
+
+    case TOKEN_XOR:
+      /* no xor-assign in Operator enum */
+      lexer_eat(lexer);
+      return OPERATOR_XOR;
+
+    case TOKEN_EQUALS:
+      lexer_eat(lexer);
+      return OPERATOR_EQUALS;
+    case TOKEN_NOT_EQUALS:
+      lexer_eat(lexer);
+      return OPERATOR_NOT_EQUALS;
+
+    case TOKEN_LESS:
+      if (next.type == TOKEN_ASSIGN) {
+        lexer_eat(lexer);
+        lexer_eat(lexer);
+        return OPERATOR_LESS_EQUAL;
+      }
+      lexer_eat(lexer);
+      return OPERATOR_LESS;
+
+    case TOKEN_GREATER:
+      if (next.type == TOKEN_ASSIGN) {
+        lexer_eat(lexer);
+        lexer_eat(lexer);
+        return OPERATOR_GREATER_EQUAL;
+      }
+      lexer_eat(lexer);
+      return OPERATOR_GREATER;
+
+    case TOKEN_SHIFT_LEFT:
+      if (next.type == TOKEN_ASSIGN) {
+        lexer_eat(lexer);
+        lexer_eat(lexer);
+        return OPERATOR_SHIFT_LEFT_ASSIGN;
+      }
+      lexer_eat(lexer);
+      return OPERATOR_SHIFT_LEFT;
+
+    case TOKEN_SHIFT_RIGHT:
+      if (next.type == TOKEN_ASSIGN) {
+        lexer_eat(lexer);
+        lexer_eat(lexer);
+        return OPERATOR_SHIFT_RIGHT_ASSIGN;
+      }
+      lexer_eat(lexer);
+      return OPERATOR_SHIFT_RIGHT;
+
+    case TOKEN_PLUS:
+      if (next.type == TOKEN_ASSIGN) {
+        lexer_eat(lexer);
+        lexer_eat(lexer);
+        return OPERATOR_PLUS_ASSIGN;
+      }
+      lexer_eat(lexer);
+      return OPERATOR_ADD;
+
+    case TOKEN_MINUS:
+      if (next.type == TOKEN_ASSIGN) {
+        lexer_eat(lexer);
+        lexer_eat(lexer);
+        return OPERATOR_MINUS_ASSIGN;
+      }
+      lexer_eat(lexer);
+      return OPERATOR_SUB;
+
+    case TOKEN_MUL:
+      if (next.type == TOKEN_ASSIGN) {
+        lexer_eat(lexer);
+        lexer_eat(lexer);
+        return OPERATOR_STAR_ASSIGN;
+      }
+      lexer_eat(lexer);
+      return OPERATOR_MUL;
+
+    case TOKEN_SLASH:
+      if (next.type == TOKEN_ASSIGN) {
+        lexer_eat(lexer);
+        lexer_eat(lexer);
+        return OPERATOR_SLASH_ASSIGN;
+      }
+      lexer_eat(lexer);
+      return OPERATOR_DIV;
+
+    default:
+      return OPERATOR_NONE;
+    }
+
+  case EXPR_POSTFIX:
+    switch (tok.type) {
+    case TOKEN_LBRACKET:
+      lexer_eat(lexer);
+      return OPERATOR_INDEX;
+    case TOKEN_DOT: /* handled by parse_postfix */
+      return OPERATOR_NONE;
+    default:
+      return OPERATOR_NONE;
+    }
+
+  default:
+    return OPERATOR_NONE;
+  }
+}
+Precedence get_precedence(Operator op, bool *is_valid_operator) {
+  *is_valid_operator = true;
+  switch (op) {
+  case OPERATOR_ASSIGN:
+  case OPERATOR_PLUS_ASSIGN:
+  case OPERATOR_MINUS_ASSIGN:
+  case OPERATOR_STAR_ASSIGN:
+  case OPERATOR_SLASH_ASSIGN:
+  case OPERATOR_BIT_OR_ASSIGN:
+  case OPERATOR_BIT_AND_ASSIGN:
+  case OPERATOR_SHIFT_LEFT_ASSIGN:
+  case OPERATOR_SHIFT_RIGHT_ASSIGN:
+    return PREC_ASSIGNMENT;
+  case OPERATOR_LOGICAL_OR:
+    return PREC_LOGICAL_OR;
+  case OPERATOR_LOGICAL_AND:
+    return PREC_LOGICAL_AND;
+  case OPERATOR_BIT_OR:
+    return PREC_BIT_OR;
+  case OPERATOR_XOR: // Added XOR
+    return PREC_XOR;
+  case OPERATOR_BIT_AND:
+    return PREC_BIT_AND;
+  case OPERATOR_EQUALS:
+  case OPERATOR_NOT_EQUALS:
+    return PREC_EQUALITY;
+  case OPERATOR_LESS:
+  case OPERATOR_GREATER:
+  case OPERATOR_LESS_EQUAL:
+  case OPERATOR_GREATER_EQUAL:
+    return PREC_RELATIONAL;
+  case OPERATOR_SHIFT_LEFT:
+  case OPERATOR_SHIFT_RIGHT:
+    return PREC_SHIFT;
+  case OPERATOR_ADD:
+  case OPERATOR_SUB:
+    return PREC_TERM;
+  case OPERATOR_MUL:
+  case OPERATOR_DIV:
+    return PREC_FACTOR;
+  case OPERATOR_LOGICAL_NOT:
+  case OPERATOR_BIT_NOT:
+  case OPERATOR_NEGATE:
+  case OPERATOR_DEREFERENCE:
+  case OPERATOR_ADDRESS_OF:
+    return PREC_UNARY;
+  case OPERATOR_INDEX:
+    return PREC_POSTFIX;
+  case OPERATOR_NONE:
+    *is_valid_operator = false;
+    return PREC_NONE;
+  default:
+    *is_valid_operator = false;
+    return PREC_NONE;
+  }
 }

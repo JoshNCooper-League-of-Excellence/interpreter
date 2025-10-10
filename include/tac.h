@@ -10,17 +10,33 @@ typedef enum {
   OP_CONST,
   OP_LOAD,
   OP_STORE,
-  OP_ADD,
-  OP_SUB,
-  OP_MUL,
-  OP_DIV,
   OP_CALL,
   OP_CALL_EXTERN,
   OP_RET,
   OP_PUSH,
   OP_ALLOCA,
+
+  OP_ADD,
+  OP_SUB,
+  OP_MUL,
+  OP_DIV,
   OP_MEMBER_LOAD,
   OP_MEMBER_STORE,
+  OP_NEGATE,
+  OP_LOGICAL_OR,
+  OP_LOGICAL_AND,
+  OP_SHIFT_LEFT,
+  OP_SHIFT_RIGHT,
+  OP_XOR,
+  OP_BIT_OR,
+  OP_BIT_AND,
+  OP_EQUALS,
+  OP_NOT_EQUALS,
+  OP_LESS,
+  OP_GREATER,
+  OP_LOGICAL_NOT,
+  OP_BIT_NOT,
+  OP_INDEX,
 } Op_Code;
 
 typedef struct {
@@ -35,9 +51,18 @@ typedef struct {
 } Instr_Buffer;
 
 typedef enum {
-  CONST_STRING,
-  CONST_INTEGER,
+  CONST_TYPE_STRING,
+  CONST_TYPE_INT,
 } Constant_Type;
+
+static inline const char *constant_type_to_string(Constant_Type type) {
+  switch (type) {
+  case CONST_TYPE_STRING:
+    return "string";
+  case CONST_TYPE_INT:
+    return "int";
+  }
+}
 
 typedef struct {
   Constant_Type type;
@@ -108,7 +133,7 @@ void module_init(Module *m, Context *context);
 #define EMIT_CALL(buf, dest, func, narg)                                       \
   EMIT(buf, MAKE_INSTR3(OP_CALL, (dest), (func), (narg)))
 
-#define EMIT_CALL_EXTERN(buf, dest, index, nargs)\
+#define EMIT_CALL_EXTERN(buf, dest, index, nargs)                              \
   EMIT(buf, MAKE_INSTR3(OP_CALL_EXTERN, (dest), (index), (nargs)))
 
 #define EMIT_RET(buf, src) EMIT(buf, MAKE_INSTR1(OP_RET, (src)))
@@ -121,6 +146,63 @@ void module_init(Module *m, Context *context);
 
 #define EMIT_ALLOCA(buf, dest, type_index)                                     \
   EMIT(buf, MAKE_INSTR2(OP_ALLOCA, (dest), (type_index)))
+
+#define EMIT_DEREFERENCE(buf, dest, src)                                       \
+  EMIT(buf, MAKE_INSTR2(OP_DEREFERENCE, (dest), (src)))
+
+#define EMIT_ADDRESS_OF(buf, dest, src)                                        \
+  EMIT(buf, MAKE_INSTR2(OP_ADDRESS_OF, (dest), (src)))
+
+#define EMIT_NEGATE(buf, dest, src)                                            \
+  EMIT(buf, MAKE_INSTR2(OP_NEGATE, (dest), (src)))
+
+#define EMIT_ASSIGN(buf, dest, src)                                            \
+  EMIT(buf, MAKE_INSTR2(OP_ASSIGN, (dest), (src)))
+
+#define EMIT_LOGICAL_OR(buf, dest, l, r)                                       \
+  EMIT(buf, MAKE_INSTR3(OP_LOGICAL_OR, (dest), (l), (r)))
+
+#define EMIT_LOGICAL_AND(buf, dest, l, r)                                      \
+  EMIT(buf, MAKE_INSTR3(OP_LOGICAL_AND, (dest), (l), (r)))
+
+#define EMIT_BIT_OR(buf, dest, l, r)                                           \
+  EMIT(buf, MAKE_INSTR3(OP_BIT_OR, (dest), (l), (r)))
+
+#define EMIT_BIT_AND(buf, dest, l, r)                                          \
+  EMIT(buf, MAKE_INSTR3(OP_BIT_AND, (dest), (l), (r)))
+
+#define EMIT_EQUALS(buf, dest, l, r)                                           \
+  EMIT(buf, MAKE_INSTR3(OP_EQUALS, (dest), (l), (r)))
+
+#define EMIT_NOT_EQUALS(buf, dest, l, r)                                       \
+  EMIT(buf, MAKE_INSTR3(OP_NOT_EQUALS, (dest), (l), (r)))
+
+#define EMIT_LESS(buf, dest, l, r)                                             \
+  EMIT(buf, MAKE_INSTR3(OP_LESS, (dest), (l), (r)))
+
+#define EMIT_GREATER(buf, dest, l, r)                                          \
+  EMIT(buf, MAKE_INSTR3(OP_GREATER, (dest), (l), (r)))
+
+#define EMIT_MINUS(buf, dest, l, r)                                            \
+  EMIT(buf, MAKE_INSTR3(OP_MINUS, (dest), (l), (r)))
+
+#define EMIT_LOGICAL_NOT(buf, dest, src)                                       \
+  EMIT(buf, MAKE_INSTR2(OP_LOGICAL_NOT, (dest), (src)))
+
+#define EMIT_BIT_NOT(buf, dest, src)                                           \
+  EMIT(buf, MAKE_INSTR2(OP_BIT_NOT, (dest), (src)))
+
+#define EMIT_INDEX(buf, dest, base, index)                                     \
+  EMIT(buf, MAKE_INSTR3(OP_INDEX, (dest), (base), (index)))
+
+#define EMIT_SHIFT_LEFT(buf, dest, l, r)                                       \
+  EMIT(buf, MAKE_INSTR3(OP_SHIFT_LEFT, (dest), (l), (r)))
+
+#define EMIT_SHIFT_RIGHT(buf, dest, l, r)                                      \
+  EMIT(buf, MAKE_INSTR3(OP_SHIFT_RIGHT, (dest), (l), (r)))
+
+#define EMIT_XOR(buf, dest, l, r)                                              \
+  EMIT(buf, MAKE_INSTR3(OP_XOR, (dest), (l), (r)))
 
 int lower_expression(Thir *n, Function *fn, Module *m);
 void lower_block(Thir *block, Function *fn, Module *m);

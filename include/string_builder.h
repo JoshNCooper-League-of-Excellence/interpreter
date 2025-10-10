@@ -55,9 +55,12 @@ static inline void sb_appendch(String_Builder *sb, char c) {
 }
 
 static inline void sb_free(String_Builder *sb) {
-  free(sb->value);
+  if (sb->value) {
+    free(sb->value);
+  }
   sb->capacity = 0;
   sb->length = 0;
+  sb->value = nullptr;
 }
 
 #endif // #ifndef STRING_BUILDER_H

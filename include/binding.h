@@ -30,6 +30,9 @@ DEFINE_LIST(Binding_Ptr)
 typedef struct {
   Type *string_type;
   Type *integer_type;
+  Type *bool_type;
+  Type *void_type;
+
   Type_Ptr_list type_table;
   Binding_Ptr_list bindings;
 
@@ -85,5 +88,7 @@ Struct_Type *struct_type_alloc(Context *context, const char *name);
 
 Binding_Ptr bind_variable(Context *context, Binding binding);
 Binding_Ptr bind_function(Context *context, Binding binding, bool is_extern);
+
+void context_initialize(Context *context);
 
 #endif

@@ -7,6 +7,155 @@
 #include <stddef.h>
 
 typedef enum {
+  PREC_NONE = 0,
+  PREC_ASSIGNMENT,  // =
+  PREC_LOGICAL_OR,  // ||
+  PREC_LOGICAL_AND, // &&
+  PREC_XOR,         // |
+  PREC_BIT_OR,      // |
+  PREC_BIT_AND,     // &
+  PREC_EQUALITY,    // == !=
+  PREC_RELATIONAL,  // < > <= >=
+  PREC_SHIFT,       // << >>
+  PREC_TERM,        // + -
+  PREC_FACTOR,      // * /
+  PREC_POSTFIX,
+  PREC_UNARY,   // ! ~ - + ^
+  PREC_PRIMARY, // literals, identifiers
+} Precedence;
+
+typedef enum {
+  EXPR_UNARY,
+  EXPR_BINARY,
+  EXPR_POSTFIX,
+} Expression_Type;
+
+typedef enum {
+  OPERATOR_NONE = 0,
+  OPERATOR_DEREFERENCE,
+  OPERATOR_ADDRESS_OF,
+  OPERATOR_NEGATE,
+  OPERATOR_ASSIGN,
+  OPERATOR_LOGICAL_OR,
+  OPERATOR_LOGICAL_AND,
+  OPERATOR_BIT_OR,
+  OPERATOR_BIT_AND,
+  OPERATOR_XOR,
+  OPERATOR_EQUALS,
+  OPERATOR_NOT_EQUALS,
+  OPERATOR_LESS,
+  OPERATOR_GREATER,
+  OPERATOR_LESS_EQUAL,
+  OPERATOR_GREATER_EQUAL,
+  OPERATOR_SHIFT_LEFT,
+  OPERATOR_SHIFT_RIGHT,
+  OPERATOR_ADD,
+  OPERATOR_SUB,
+  OPERATOR_MUL,
+  OPERATOR_DIV,
+  OPERATOR_LOGICAL_NOT,
+  OPERATOR_BIT_NOT,
+  OPERATOR_PLUS_ASSIGN,
+  OPERATOR_MINUS_ASSIGN,
+  OPERATOR_STAR_ASSIGN,
+  OPERATOR_SLASH_ASSIGN,
+  OPERATOR_BIT_OR_ASSIGN,
+  OPERATOR_BIT_AND_ASSIGN,
+  OPERATOR_SHIFT_LEFT_ASSIGN,
+  OPERATOR_SHIFT_RIGHT_ASSIGN,
+  OPERATOR_INDEX,
+} Operator;
+
+static inline const char *operator_to_string(Operator op) {
+  switch (op) {
+  case OPERATOR_NONE:
+    return "none";
+  case OPERATOR_DEREFERENCE:
+    return "*";
+  case OPERATOR_ADDRESS_OF:
+    return "&";
+  case OPERATOR_NEGATE:
+    return "-";
+  case OPERATOR_ASSIGN:
+    return "=";
+  case OPERATOR_LOGICAL_OR:
+    return "||";
+  case OPERATOR_LOGICAL_AND:
+    return "&&";
+  case OPERATOR_BIT_OR:
+    return "|";
+  case OPERATOR_BIT_AND:
+    return "&";
+  case OPERATOR_EQUALS:
+    return "==";
+  case OPERATOR_NOT_EQUALS:
+    return "!=";
+  case OPERATOR_LESS:
+    return "<";
+  case OPERATOR_GREATER:
+    return ">";
+  case OPERATOR_LESS_EQUAL:
+    return "<=";
+  case OPERATOR_GREATER_EQUAL:
+    return ">=";
+  case OPERATOR_SHIFT_LEFT:
+    return "<<";
+  case OPERATOR_SHIFT_RIGHT:
+    return ">>";
+  case OPERATOR_ADD:
+    return "+";
+  case OPERATOR_SUB:
+    return "-";
+  case OPERATOR_MUL:
+    return "*";
+  case OPERATOR_DIV:
+    return "/";
+  case OPERATOR_LOGICAL_NOT:
+    return "!";
+  case OPERATOR_BIT_NOT:
+    return "~";
+  case OPERATOR_PLUS_ASSIGN:
+    return "+=";
+  case OPERATOR_MINUS_ASSIGN:
+    return "-=";
+  case OPERATOR_STAR_ASSIGN:
+    return "*=";
+  case OPERATOR_SLASH_ASSIGN:
+    return "/=";
+  case OPERATOR_BIT_OR_ASSIGN:
+    return "|=";
+  case OPERATOR_BIT_AND_ASSIGN:
+    return "&=";
+  case OPERATOR_SHIFT_LEFT_ASSIGN:
+    return "<<=";
+  case OPERATOR_SHIFT_RIGHT_ASSIGN:
+    return ">>=";
+  case OPERATOR_INDEX:
+    return "[]";
+  case OPERATOR_XOR:
+    return "^";
+  default:
+    return "<unknown>";
+  }
+}
+
+static inline bool operator_is_compound(Operator op) {
+  switch (op) {
+  case OPERATOR_PLUS_ASSIGN:
+  case OPERATOR_MINUS_ASSIGN:
+  case OPERATOR_STAR_ASSIGN:
+  case OPERATOR_SLASH_ASSIGN:
+  case OPERATOR_BIT_OR_ASSIGN:
+  case OPERATOR_BIT_AND_ASSIGN:
+  case OPERATOR_SHIFT_LEFT_ASSIGN:
+  case OPERATOR_SHIFT_RIGHT_ASSIGN:
+    return true;
+  default:
+    return false;
+  }
+}
+
+typedef enum {
   AST_ERROR,
   AST_PROGRAM,
   AST_LITERAL,
@@ -84,20 +233,21 @@ typedef struct Ast {
 
     struct {
       struct Ast *left, *right;
-      Token_Type op;
+      Operator op;
     } binary;
 
     struct {
       struct Ast *operand;
-      Token_Type op;
+      Operator op;
     } unary;
 
     const char *identifier;
     struct {
       const char *value;
       enum {
-        STRING,
-        INTEGER,
+        AST_LITERAL_STRING,
+        AST_LITERAL_INTEGER,
+        AST_LITERAL_BOOL,
       } tag;
     } literal;
 
@@ -121,7 +271,6 @@ typedef struct Ast {
 
     struct {
       const char *message;
-      bool fatal;
     } error;
   };
 
@@ -239,7 +388,8 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
     sb_append(sb, "\n");
     print_indent(sb, indent + 1);
     sb_append(sb, "type: ");
-    sb_append(sb, node->literal.tag == STRING ? "STRING" : "INTEGER");
+    sb_append(sb,
+              node->literal.tag == AST_LITERAL_STRING ? "STRING" : "INTEGER");
     sb_append(sb, "\n");
     break;
   case AST_IDENTIFIER:
@@ -277,7 +427,7 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   case AST_UNARY:
     print_indent(sb, indent + 1);
     sb_append(sb, "op: ");
-    sb_append(sb, token_type_to_string(node->unary.op));
+    sb_append(sb, operator_to_string(node->unary.op));
     sb_append(sb, "\n");
     print_indent(sb, indent + 1);
     sb_append(sb, "operand:\n");
@@ -286,7 +436,7 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   case AST_BINARY:
     print_indent(sb, indent + 1);
     sb_append(sb, "op: ");
-    sb_append(sb, token_type_to_string(node->binary.op));
+    sb_append(sb, operator_to_string(node->binary.op));
     sb_append(sb, "\n");
     print_indent(sb, indent + 1);
     sb_append(sb, "left:\n");
@@ -325,8 +475,6 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
     sb_append(sb, node->error.message);
     sb_append(sb, "\n");
     print_indent(sb, indent + 1);
-    sb_append(sb, "fatal: ");
-    sb_append(sb, node->error.fatal ? "true" : "false");
     sb_append(sb, "\n");
     break;
   }
@@ -346,8 +494,7 @@ static inline void print_ast(Ast *ast, String_Builder *sb) {
     } else if ((parsing_only_values) != (parsing_flag)) {                      \
       return parser_error(context, span,                                       \
                           "aggregate initializers can only contain all "       \
-                          "values, or all key-value pairs.",                   \
-                          true);                                               \
+                          "values, or all key-value pairs.");                  \
     }                                                                          \
   } while (0)
 

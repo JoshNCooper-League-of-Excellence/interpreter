@@ -10,7 +10,7 @@
   fprintf(stderr, "[VM]: " msg "\n" __VA_OPT__(, ) __VA_ARGS__);               \
   exit(1);
 
-Stack_Frame enter(Function *fn, int ret_dest, int caller) {
+static inline Stack_Frame enter(Function *fn, int ret_dest, int caller) {
   Stack_Frame frame;
   frame.fn = fn;
   // always allocate at least a byte, to simplify freeing for now
@@ -27,7 +27,7 @@ Stack_Frame enter(Function *fn, int ret_dest, int caller) {
   return frame;
 }
 
-char *fix_escape_characters(const char *s) {
+static inline char *fix_escape_characters(const char *s) {
   size_t len = strlen(s);
   char *result = malloc(len + 1);
   if (!result)
@@ -77,6 +77,14 @@ char *fix_escape_characters(const char *s) {
   return result;
 }
 
+#define FETCH()                                                                \
+  do {                                                                         \
+    if (sf->ip >= sf->fn->code.length)                                         \
+      goto L_RETURN_TO_CALLER;                                                 \
+    instr = sf->fn->code.data[sf->ip++];                                       \
+    goto *dispatch[instr.op];                                                  \
+  } while (0)
+
 void vm_execute(Module *m) {
   if (m->functions.length == 0) {
     VM_ERRF("module had no function, so we have nothing to execute.");
@@ -87,205 +95,357 @@ void vm_execute(Module *m) {
 
   Value constants[1024] = {0};
 
-  // First, we process all constants into a buffer of 'Value's
+  // collect constants into 'Value's
   LIST_FOREACH(m->constants, constant) {
-    if (constant.type == CONST_INTEGER) {
+    if (constant.type == CONST_TYPE_INT) {
       constants[__i] =
           (Value){.integer = atoi(constant.value), .type = VALUE_INTEGER};
-    } else if (constant.type == CONST_STRING) {
-
+    } else if (constant.type == CONST_TYPE_STRING) {
       constants[__i] = (Value){.string = fix_escape_characters(constant.value),
                                .type = VALUE_STRING};
     }
   }
 
   Stack_Frame call_stack[256];
-
   for (int i = 0; i < 256; ++i) {
     Stack_Frame *frame = &call_stack[i];
     frame->uid = i;
   }
 
-  int sp = 0;
+  int sp = 0; // stack pointer (into call_stack)
 
   Value arg_stack[64];
   int arg_p = 0;
+
 #define ENTRY_POINT_CALLER -1
 
   Function *entry = m->entry_point;
   call_stack[0] = enter(entry, ENTRY_POINT_CALLER, ENTRY_POINT_CALLER);
 
-  while (sp >= 0) {
-    Stack_Frame *sf = &call_stack[sp];
-    if (sf->ip >= sf->fn->code.length) {
-      if (sf->caller == ENTRY_POINT_CALLER) {
-        break;
-      }
-      Value rv = sf->locals[0];
-      leave(sf);
-      int caller_idx = sf->caller;
-      int dest = sf->ret_dest;
-      sp = caller_idx;
-      if (dest >= 0) {
-        sf->locals[dest] = rv;
-      }
-      continue;
-    }
+  Stack_Frame *sf = &call_stack[sp];
+  Instr instr;
 
-    Instr instr = sf->fn->code.data[sf->ip++];
+  const static void *dispatch[] = {
+      [OP_ALLOCA] = &&L_ALLOCA,
+      [OP_MEMBER_LOAD] = &&L_MEMBER_LOAD,
+      [OP_MEMBER_STORE] = &&L_MEMBER_STORE,
+      [OP_CONST] = &&L_CONST,
+      [OP_LOAD] = &&L_LOAD,
+      [OP_STORE] = &&L_STORE,
+      [OP_ADD] = &&L_ADD,
+      [OP_SUB] = &&L_SUB,
+      [OP_MUL] = &&L_MUL,
+      [OP_DIV] = &&L_DIV,
+      [OP_PUSH] = &&L_PUSH,
+      [OP_CALL_EXTERN] = &&L_CALL_EXTERN,
+      [OP_CALL] = &&L_CALL,
+      [OP_RET] = &&L_RET,
+      [OP_NEGATE] = &&L_NEGATE,
+      [OP_LOGICAL_OR] = &&L_LOGICAL_OR,
+      [OP_LOGICAL_AND] = &&L_LOGICAL_AND,
+      [OP_SHIFT_LEFT] = &&L_SHIFT_LEFT,
+      [OP_SHIFT_RIGHT] = &&L_SHIFT_RIGHT,
+      [OP_XOR] = &&L_XOR,
+      [OP_BIT_OR] = &&L_BIT_OR,
+      [OP_BIT_AND] = &&L_BIT_AND,
+      [OP_EQUALS] = &&L_EQUALS,
+      [OP_LESS] = &&L_LESS,
+      [OP_GREATER] = &&L_GREATER,
+      [OP_LOGICAL_NOT] = &&L_LOGICAL_NOT,
+      [OP_BIT_NOT] = &&L_BIT_NOT,
+      [OP_INDEX] = &&L_INDEX,
+  };
 
-    switch (instr.op) {
-    case OP_ALLOCA: {
-      int dest = instr.a;
-      int ty_idx = instr.b;
-      if (ty_idx < 0 || (unsigned)ty_idx >= m->types.length) {
-        VM_ERRF("invalid type index %d", ty_idx);
-      }
-      sf->locals[dest] = default_value_of_type(m->types.data[ty_idx], sf->uid);
-    } break;
-    case OP_MEMBER_LOAD: {
-      int dest = instr.a;
-      int struct_slot = instr.b;
-      int member_idx = instr.c;
-      Value *struct_val = &sf->locals[struct_slot];
-      if (struct_val->type != VALUE_STRUCT) {
-        VM_ERRF("OP_MEMBER_LOAD: value at slot %d is not a struct",
-                struct_slot);
-      }
-      if (member_idx < 0 || (size_t)member_idx >= struct_val->$struct.length) {
-        VM_ERRF("OP_MEMBER_LOAD: invalid member index %d", member_idx);
-      }
-      Value value = struct_val->$struct.members[member_idx];
-      sf->locals[dest] = value;
-    } break;
-    case OP_MEMBER_STORE: {
-      int struct_slot = instr.a;
-      int member_idx = instr.b;
-      int src = instr.c;
-      Value *struct_val = &sf->locals[struct_slot];
-      if (struct_val->type != VALUE_STRUCT) {
-        VM_ERRF("OP_MEMBER_STORE: value at slot %d is not a struct",
-                struct_slot);
-      }
-      if (member_idx < 0 || (size_t)member_idx >= struct_val->$struct.length) {
-        VM_ERRF("OP_MEMBER_STORE: invalid member index %d", member_idx);
-      }
-      struct_val->$struct.members[member_idx] = sf->locals[src];
-    } break;
-    case OP_CONST: {
-      int dest = instr.a;
-      int cidx = instr.b;
-      sf->locals[dest] = constants[cidx];
-    } break;
-    case OP_LOAD: {
-      int dest = instr.a;
-      int slot = instr.b;
-      sf->locals[dest] = call_stack[sp].locals[slot];
-    } break;
-    case OP_STORE: {
-      int slot = instr.a;
-      int src = instr.b;
-      call_stack[sp].locals[slot] = call_stack[sp].locals[src];
-    } break;
-    case OP_ADD:
-    case OP_SUB:
-    case OP_MUL:
-    case OP_DIV: {
-      int dest = instr.a, l = instr.b, r = instr.c;
-      int lv = call_stack[sp].locals[l].integer;
-      int rv = call_stack[sp].locals[r].integer;
-      int result = 0;
-      if (instr.op == OP_ADD) {
-        result = lv + rv;
-      } else if (instr.op == OP_SUB) {
-        result = lv - rv;
-      } else if (instr.op == OP_MUL) {
-        result = lv * rv;
-      } else if (instr.op == OP_DIV) {
-        result = lv / rv;
-      }
-      call_stack[sp].locals[dest].integer = result;
-      call_stack[sp].locals[dest].type = VALUE_INTEGER;
-    } break;
-    case OP_PUSH: {
-      int src = instr.a;
-      arg_stack[arg_p++] = call_stack[sp].locals[src];
-    } break;
-    case OP_CALL_EXTERN: {
-      int dest = instr.a;
-      int func_idx = instr.b;
-      int nargs = instr.c;
+  goto L_FUNCTION_ENTRY;
 
-      if (func_idx < 0 || (unsigned)func_idx >= CACHED_EXTERNS.length) {
-        VM_ERRF("invalid extern index %d", func_idx);
-      }
-      Extern_Function callee = CACHED_EXTERNS.data[func_idx];
+L_FUNCTION_ENTRY:
+  FETCH();
 
-      int base = arg_p - nargs;
-      if (base < 0) {
-        VM_ERRF("not enough arguments on arg stack for extern call (need=%d "
-                "have=%d)",
-                nargs, arg_p);
-      }
+L_ALLOCA: {
+  int dest = instr.a;
+  int ty_idx = instr.b;
+  if (ty_idx < 0 || (unsigned)ty_idx >= m->types.length) {
+    VM_ERRF("invalid type index %d", ty_idx);
+  }
+  sf->locals[dest] = default_value_of_type(m->types.data[ty_idx], sf->uid);
+  FETCH();
+}
 
-      Value value = libffi_dynamic_dispatch(callee, &arg_stack[base], nargs);
-      /* pop the used args */
-      arg_p = base;
-      call_stack[sp].locals[dest] = value;
+L_MEMBER_LOAD: {
+  int dest = instr.a;
+  int struct_slot = instr.b;
+  int member_idx = instr.c;
+  Value *struct_val = &sf->locals[struct_slot];
+  if (struct_val->type != VALUE_STRUCT) {
+    VM_ERRF("OP_MEMBER_LOAD: value at slot %d is not a struct", struct_slot);
+  }
+  if (member_idx < 0 || (size_t)member_idx >= struct_val->$struct.length) {
+    VM_ERRF("OP_MEMBER_LOAD: invalid member index %d", member_idx);
+  }
+  sf->locals[dest] = struct_val->$struct.members[member_idx];
+  FETCH();
+}
 
-    } break;
-    case OP_CALL: {
-      int dest = instr.a;
-      int func_idx = instr.b;
-      int nargs = instr.c;
+L_MEMBER_STORE: {
+  int struct_slot = instr.a;
+  int member_idx = instr.b;
+  int src = instr.c;
+  Value *struct_val = &sf->locals[struct_slot];
+  if (struct_val->type != VALUE_STRUCT) {
+    VM_ERRF("OP_MEMBER_STORE: value at slot %d is not a struct", struct_slot);
+  }
+  if (member_idx < 0 || (size_t)member_idx >= struct_val->$struct.length) {
+    VM_ERRF("OP_MEMBER_STORE: invalid member index %d", member_idx);
+  }
+  struct_val->$struct.members[member_idx] = sf->locals[src];
+  FETCH();
+}
 
-      if (func_idx < 0 || (unsigned)func_idx >= m->functions.length) {
-        VM_ERRF("invalid function index %d", func_idx);
-      }
-      Function *callee = m->functions.data[func_idx];
+L_CONST: {
+  int dest = instr.a;
+  int cidx = instr.b;
+  sf->locals[dest] = constants[cidx];
+  FETCH();
+}
 
-      if (sp + 1 >= (int)(sizeof(call_stack) / sizeof(call_stack[0]))) {
-        VM_ERRF("call stack overflow");
-      }
+L_LOAD: {
+  int dest = instr.a;
+  int slot = instr.b;
+  sf->locals[dest] = sf->locals[slot];
+  FETCH();
+}
 
-      int base = arg_p - nargs;
-      if (base < 0) {
-        VM_ERRF("not enough arguments on arg stack for call (need=%d have=%d)",
-                nargs, arg_p);
-      }
+L_STORE: {
+  int slot = instr.a;
+  int src = instr.b;
+  sf->locals[slot] = sf->locals[src];
+  FETCH();
+}
 
-      int new_sp = sp + 1;
-      call_stack[new_sp] = enter(callee, dest, sp);
-      for (int i = 0; i < nargs; ++i) {
-        call_stack[new_sp].locals[i] = arg_stack[base + i];
-      }
-      arg_p = 0;
-      arg_p = base;
-      sp = new_sp;
-    } break;
-    case OP_RET: {
-      int src = instr.a;
-      Value rv = {.type = VALUE_VOID};
-      if (src >= 0) {
-        rv = call_stack[sp].locals[src];
-      }
-      int caller_idx = call_stack[sp].caller;
-      int ret_dest = call_stack[sp].ret_dest;
-      leave(sf);
-      if (caller_idx == ENTRY_POINT_CALLER) {
-        break;
-      }
-      sp = caller_idx;
-      if (ret_dest >= 0) {
-        call_stack[sp].locals[ret_dest] = rv;
-      }
-    } break;
-    default:
-      VM_ERRF("unknown opcode %d", instr.op);
-    }
+L_ADD: {
+  int d = instr.a, l = instr.b, r = instr.c;
+  sf->locals[d].integer = sf->locals[l].integer + sf->locals[r].integer;
+  sf->locals[d].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_SUB: {
+  int d = instr.a, l = instr.b, r = instr.c;
+  sf->locals[d].integer = sf->locals[l].integer - sf->locals[r].integer;
+  sf->locals[d].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_MUL: {
+  int d = instr.a, l = instr.b, r = instr.c;
+  sf->locals[d].integer = sf->locals[l].integer * sf->locals[r].integer;
+  sf->locals[d].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_DIV: {
+  int d = instr.a, l = instr.b, r = instr.c;
+  sf->locals[d].integer = sf->locals[l].integer / sf->locals[r].integer;
+  sf->locals[d].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_PUSH: {
+  int src = instr.a;
+  arg_stack[arg_p++] = sf->locals[src];
+  FETCH();
+}
+
+L_CALL_EXTERN: {
+  int dest = instr.a;
+  int func_idx = instr.b;
+  int nargs = instr.c;
+
+  if (func_idx < 0 || (unsigned)func_idx >= CACHED_EXTERNS.length) {
+    VM_ERRF("invalid extern index %d", func_idx);
+  }
+  Extern_Function callee = CACHED_EXTERNS.data[func_idx];
+
+  int base = arg_p - nargs;
+  if (base < 0) {
+    VM_ERRF(
+        "not enough arguments on arg stack for extern call (need=%d have=%d)",
+        nargs, arg_p);
   }
 
+  Value value = libffi_dynamic_dispatch(callee, &arg_stack[base], nargs);
+  arg_p = base; // pop
+  sf->locals[dest] = value;
+
+  FETCH();
+}
+
+L_CALL: {
+  int dest = instr.a;
+  int func_idx = instr.b;
+  int nargs = instr.c;
+
+  if (func_idx < 0 || (unsigned)func_idx >= m->functions.length) {
+    VM_ERRF("invalid function index %d", func_idx);
+  }
+  Function *callee = m->functions.data[func_idx];
+
+  if (sp + 1 >= (int)(sizeof(call_stack) / sizeof(call_stack[0]))) {
+    VM_ERRF("call stack overflow");
+  }
+
+  int base = arg_p - nargs;
+  if (base < 0) {
+    VM_ERRF("not enough arguments on arg stack for call (need=%d have=%d)",
+            nargs, arg_p);
+  }
+
+  int new_sp = sp + 1;
+  call_stack[new_sp] = enter(callee, dest, sp);
+  for (int i = 0; i < nargs; ++i) {
+    call_stack[new_sp].locals[i] = arg_stack[base + i];
+  }
+  arg_p = base; // pop args
+  sp = new_sp;
+  sf = &call_stack[sp];
+
+  FETCH();
+}
+
+L_RET: {
+  int src = instr.a;
+  Value rv = {.type = VALUE_VOID};
+  if (src >= 0) {
+    rv = sf->locals[src];
+  }
+  int caller_idx = sf->caller;
+  int ret_dest = sf->ret_dest;
+  leave(sf);
+  if (caller_idx == ENTRY_POINT_CALLER) {
+    goto L_EXIT;
+  }
+  sp = caller_idx;
+  sf = &call_stack[sp];
+  if (ret_dest >= 0) {
+    sf->locals[ret_dest] = rv;
+  }
+  FETCH();
+}
+
+L_RETURN_TO_CALLER: {
+  // Ran off the end without an explicit return
+  if (sf->caller == ENTRY_POINT_CALLER) {
+    goto L_EXIT;
+  }
+  Value rv = sf->locals[0];
+  int caller_idx = sf->caller;
+  int dest = sf->ret_dest;
+  leave(sf);
+  sp = caller_idx;
+  sf = &call_stack[sp];
+  if (dest >= 0) {
+    sf->locals[dest] = rv;
+  }
+  FETCH();
+}
+
+L_NEGATE: {
+  int dest = instr.a, src = instr.b;
+  sf->locals[dest].integer = -sf->locals[src].integer;
+  sf->locals[dest].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_LOGICAL_OR: {
+  int d = instr.a, l = instr.b, r = instr.c;
+  sf->locals[d].integer = (sf->locals[l].integer || sf->locals[r].integer);
+  sf->locals[d].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_LOGICAL_AND: {
+  int d = instr.a, l = instr.b, r = instr.c;
+  sf->locals[d].integer = (sf->locals[l].integer && sf->locals[r].integer);
+  sf->locals[d].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_SHIFT_LEFT: {
+  int d = instr.a, l = instr.b, r = instr.c;
+  sf->locals[d].integer = (sf->locals[l].integer << sf->locals[r].integer);
+  sf->locals[d].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_SHIFT_RIGHT: {
+  int d = instr.a, l = instr.b, r = instr.c;
+  sf->locals[d].integer = (sf->locals[l].integer >> sf->locals[r].integer);
+  sf->locals[d].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_XOR: {
+  int d = instr.a, l = instr.b, r = instr.c;
+  sf->locals[d].integer = (sf->locals[l].integer ^ sf->locals[r].integer);
+  sf->locals[d].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_BIT_OR: {
+  int d = instr.a, l = instr.b, r = instr.c;
+  sf->locals[d].integer = (sf->locals[l].integer | sf->locals[r].integer);
+  sf->locals[d].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_BIT_AND: {
+  int d = instr.a, l = instr.b, r = instr.c;
+  sf->locals[d].integer = (sf->locals[l].integer & sf->locals[r].integer);
+  sf->locals[d].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_EQUALS: {
+  int d = instr.a, l = instr.b, r = instr.c;
+  sf->locals[d].integer = (sf->locals[l].integer == sf->locals[r].integer);
+  sf->locals[d].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_LESS: {
+  int d = instr.a, l = instr.b, r = instr.c;
+  sf->locals[d].integer = (sf->locals[l].integer < sf->locals[r].integer);
+  sf->locals[d].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_GREATER: {
+  int d = instr.a, l = instr.b, r = instr.c;
+  sf->locals[d].integer = (sf->locals[l].integer > sf->locals[r].integer);
+  sf->locals[d].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_LOGICAL_NOT: {
+  int d = instr.a, s = instr.b;
+  sf->locals[d].integer = !sf->locals[s].integer;
+  sf->locals[d].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_BIT_NOT: {
+  int d = instr.a, s = instr.b;
+  sf->locals[d].integer = ~sf->locals[s].integer;
+  sf->locals[d].type = VALUE_INTEGER;
+  FETCH();
+}
+
+L_INDEX:
+  VM_ERRF("[...] index operations not implemented");
+
+L_EXIT:
   leave(&call_stack[0]);
+  return;
 }
 
 void print_value(Value *value, String_Builder *sb) {
@@ -315,6 +475,12 @@ void print_value(Value *value, String_Builder *sb) {
 Value default_value_of_type(Type *type, unsigned owner_uid) {
   switch (type->tag) {
   case TYPE_INT: {
+    return (Value){
+        .type = VALUE_INTEGER,
+        .integer = 0,
+    };
+  }
+  case TYPE_BOOL: {
     return (Value){
         .type = VALUE_INTEGER,
         .integer = 0,

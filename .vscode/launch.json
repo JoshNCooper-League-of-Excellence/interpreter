@@ -5,7 +5,9 @@
       "request": "launch",
       "name": "Launch",
       "program": "${workspaceFolder}/bin/debug/bindings",
-      "args": [],
+      "args": [
+        "-log=max"
+      ],
       "cwd": "${workspaceFolder}"
     }
   ]

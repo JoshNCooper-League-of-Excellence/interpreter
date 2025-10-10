@@ -19,8 +19,12 @@ typedef enum {
   TOKEN_EOF = -1,
 
   TOKEN_IDENTIFIER,
+
   TOKEN_INTEGER,
   TOKEN_STRING,
+
+  TOKEN_TRUE,
+  TOKEN_FALSE,
 
   TOKEN_COLON,
 
@@ -39,15 +43,70 @@ typedef enum {
   TOKEN_PLUS,
   TOKEN_MINUS,
   TOKEN_SLASH,
-  TOKEN_STAR,
+  TOKEN_MUL,
   TOKEN_ASSIGN,
+  TOKEN_XOR,
 
   TOKEN_STRUCT,
   TOKEN_DOT,
+
+  TOKEN_SHIFT_LEFT,
+  TOKEN_SHIFT_RIGHT,
+
+  // relationals
+  TOKEN_LOGICAL_AND,
+  TOKEN_LOGICAL_OR,
+  TOKEN_LOGICAL_NOT,
+  TOKEN_EQUALS,
+  TOKEN_NOT_EQUALS,
+
+  TOKEN_GREATER,
+  TOKEN_LESS,
+
+  TOKEN_BIT_AND,
+  TOKEN_BIT_OR,
+  TOKEN_BIT_NOT,
+
+  TOKEN_LBRACKET,
+  TOKEN_RBRACKET,
 } Token_Type;
 
 static inline const char *token_type_to_string(Token_Type type) {
   switch (type) {
+  case TOKEN_TRUE:
+    return "TRUE";
+  case TOKEN_FALSE:
+    return "FALSE";
+  case TOKEN_EXTERN:
+    return "EXTERN";
+  case TOKEN_STRUCT:
+    return "STRUCT";
+  case TOKEN_DOT:
+    return "DOT";
+  case TOKEN_SHIFT_LEFT:
+    return "SHIFT_LEFT";
+  case TOKEN_SHIFT_RIGHT:
+    return "SHIFT_RIGHT";
+  case TOKEN_LOGICAL_AND:
+    return "LOGICAL_AND";
+  case TOKEN_LOGICAL_OR:
+    return "LOGICAL_OR";
+  case TOKEN_LOGICAL_NOT:
+    return "LOGICAL_NOT";
+  case TOKEN_EQUALS:
+    return "EQUALS";
+  case TOKEN_NOT_EQUALS:
+    return "NOT_EQUALS";
+  case TOKEN_GREATER:
+    return "GREATER";
+  case TOKEN_LESS:
+    return "LESS";
+  case TOKEN_BIT_AND:
+    return "BIT_AND";
+  case TOKEN_BIT_OR:
+    return "BIT_OR";
+  case TOKEN_BIT_NOT:
+    return "BIT_NOT";
   case TOKEN_EOF:
     return "EOF";
   case TOKEN_IDENTIFIER:
@@ -78,7 +137,7 @@ static inline const char *token_type_to_string(Token_Type type) {
     return "MINUS";
   case TOKEN_SLASH:
     return "SLASH";
-  case TOKEN_STAR:
+  case TOKEN_MUL:
     return "STAR";
   case TOKEN_ASSIGN:
     return "ASSIGN";
@@ -234,8 +293,8 @@ static inline Token lexer_gettok(Lexer *lexer) {
         Token_Type type;
         size_t len;
       } keywords[] = {
-          {"extern", TOKEN_EXTERN, 6},
-          {"struct", TOKEN_STRUCT, 6},
+          {"extern", TOKEN_EXTERN, 6}, {"true", TOKEN_TRUE, 4},
+          {"false", TOKEN_FALSE, 5},   {"struct", TOKEN_STRUCT, 6},
           {"return", TOKEN_RETURN, 6},
       };
 
@@ -271,50 +330,125 @@ static inline Token lexer_gettok(Lexer *lexer) {
       size_t begin_col = lexer->col;
       lexer->pos++;
       lexer->col++;
+
+      Token_Type type = TOKEN_EOF;
       switch (c) {
-      case '+':
-        return (Token){nullptr, false, TOKEN_PLUS,
-                       .span = {begin_line, begin_col, 1, start}};
-      case '-':
-        return (Token){nullptr, false, TOKEN_MINUS,
-                       .span = {begin_line, begin_col, 1, start}};
-      case '/':
-        return (Token){nullptr, false, TOKEN_SLASH,
-                       .span = {begin_line, begin_col, 1, start}};
-      case '*':
-        return (Token){nullptr, false, TOKEN_STAR,
-                       .span = {begin_line, begin_col, 1, start}};
+      case '&':
+        if (lexer->pos < lexer->length && lexer->input[lexer->pos] == '&') {
+          lexer->pos++;
+          lexer->col++;
+          type = TOKEN_LOGICAL_AND;
+        } else {
+          type = TOKEN_BIT_AND;
+        }
+        break;
+      case '|':
+        if (lexer->pos < lexer->length && lexer->input[lexer->pos] == '|') {
+          lexer->pos++;
+          lexer->col++;
+          type = TOKEN_LOGICAL_OR;
+        } else {
+          type = TOKEN_BIT_OR;
+        }
+        break;
+      case '[':
+        type = TOKEN_LBRACKET;
+        break;
+      case ']':
+        type = TOKEN_RBRACKET;
+        break;
+      case '!':
+        if (lexer->pos < lexer->length && lexer->input[lexer->pos] == '=') {
+          lexer->pos++;
+          lexer->col++;
+          type = TOKEN_NOT_EQUALS;
+        } else {
+          type = TOKEN_LOGICAL_NOT;
+        }
+        break;
       case '=':
-        return (Token){nullptr, false, TOKEN_ASSIGN,
-                       .span = {begin_line, begin_col, 1, start}};
+        if (lexer->pos < lexer->length && lexer->input[lexer->pos] == '=') {
+          lexer->pos++;
+          lexer->col++;
+          type = TOKEN_EQUALS;
+        } else {
+          type = TOKEN_ASSIGN;
+        }
+        break;
+      case '<':
+        if (lexer->pos < lexer->length && lexer->input[lexer->pos] == '<') {
+          lexer->pos++;
+          lexer->col++;
+          type = TOKEN_SHIFT_LEFT;
+        } else {
+          type = TOKEN_LESS;
+        }
+        break;
+      case '>':
+        if (lexer->pos < lexer->length && lexer->input[lexer->pos] == '>') {
+          lexer->pos++;
+          lexer->col++;
+          type = TOKEN_SHIFT_RIGHT;
+        } else {
+          type = TOKEN_GREATER;
+        }
+        break;
+      case '~':
+        type = TOKEN_BIT_NOT;
+        break;
+      case '+':
+        type = TOKEN_PLUS;
+        break;
+      case '-':
+        type = TOKEN_MINUS;
+        break;
+      case '/':
+        type = TOKEN_SLASH;
+        break;
+      case '^':
+        type = TOKEN_XOR;
+        break;
+      case '*':
+        type = TOKEN_MUL;
+        break;
       case '.':
-        return (Token){nullptr, false, TOKEN_DOT,
-                       .span = {begin_line, begin_col, 1, start}};
+        type = TOKEN_DOT;
+        break;
       case ':':
-        return (Token){nullptr, false, TOKEN_COLON,
-                       .span = {begin_line, begin_col, 1, start}};
+        type = TOKEN_COLON;
+        break;
       case ';':
-        return (Token){nullptr, false, TOKEN_SEMI,
-                       .span = {begin_line, begin_col, 1, start}};
+        type = TOKEN_SEMI;
+        break;
       case ',':
-        return (Token){nullptr, false, TOKEN_COMMA,
-                       .span = {begin_line, begin_col, 1, start}};
+        type = TOKEN_COMMA;
+        break;
       case '(':
-        return (Token){nullptr, false, TOKEN_LPAREN,
-                       .span = {begin_line, begin_col, 1, start}};
+        type = TOKEN_LPAREN;
+        break;
       case ')':
-        return (Token){nullptr, false, TOKEN_RPAREN,
-                       .span = {begin_line, begin_col, 1, start}};
+        type = TOKEN_RPAREN;
+        break;
       case '{':
-        return (Token){nullptr, false, TOKEN_LCURLY,
-                       .span = {begin_line, begin_col, 1, start}};
+        type = TOKEN_LCURLY;
+        break;
       case '}':
-        return (Token){nullptr, false, TOKEN_RCURLY,
-                       .span = {begin_line, begin_col, 1, start}};
+        type = TOKEN_RCURLY;
+        break;
       default:
         break;
       }
-    } else if (isspace(c)) {
+      if (type == TOKEN_EOF) {
+        fprintf(stderr, "unknown operator in input ('%c') at %s:%zu:%zu", c,
+                lexer->filename, lexer->line, lexer->col);
+        lexer->pos++;
+        lexer->col++;
+        continue;
+      }
+      return (Token){nullptr, false, type,
+                     .span = {begin_line, begin_col, 1, start}};
+    }
+    if (isspace(c)) {
       if (c == '\n') {
         lexer->line++;
         lexer->col = 1;
@@ -391,5 +525,38 @@ static inline Token lexer_lookahead(Lexer *lexer, size_t n_tokens) {
     return (Token){.type = TOKEN_EOF, .span = lexer->lookahead.data[0].span};
   return lexer->lookahead.data[n_tokens];
 }
+
+static inline bool token_is_operator(Token_Type type) {
+  switch (type) {
+  case TOKEN_LPAREN:
+  case TOKEN_PLUS:
+  case TOKEN_MINUS:
+  case TOKEN_MUL:
+  case TOKEN_SLASH:
+  case TOKEN_XOR:
+  case TOKEN_ASSIGN:
+  case TOKEN_LOGICAL_AND:
+  case TOKEN_LOGICAL_OR:
+  case TOKEN_LOGICAL_NOT:
+  case TOKEN_EQUALS:
+  case TOKEN_NOT_EQUALS:
+  case TOKEN_GREATER:
+  case TOKEN_LESS:
+  case TOKEN_BIT_AND:
+  case TOKEN_BIT_OR:
+  case TOKEN_BIT_NOT:
+  case TOKEN_SHIFT_LEFT:
+  case TOKEN_SHIFT_RIGHT:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static inline bool lexer_next_is_operator(Lexer *lexer) {
+  Token_Type type = lexer_next(lexer);
+  return token_is_operator(type);
+}
+
 
 #endif

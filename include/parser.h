@@ -3,38 +3,29 @@
 #include "lexer.h"
 #include <limits.h>
 
-typedef enum {
-  PREC_NONE = 0,
-  PREC_ASSIGNMENT, // =
-  PREC_TERM,       // + -
-  PREC_FACTOR,     // * /
-  PREC_CALL,       // ()
-  PREC_PRIMARY,    // literals, identifiers
-} Precedence;
 
-static inline Precedence get_precedence(Token_Type type,
-                                        bool *is_valid_operator) {
-  *is_valid_operator = true;
-  switch (type) {
-  case TOKEN_ASSIGN:
-    return PREC_ASSIGNMENT;
-  case TOKEN_PLUS:
-  case TOKEN_MINUS:
-    return PREC_TERM;
-  case TOKEN_STAR:
-  case TOKEN_SLASH:
-    return PREC_FACTOR;
-  case TOKEN_LPAREN:
-    return PREC_CALL;
-  case TOKEN_IDENTIFIER:
-  case TOKEN_INTEGER:
-  case TOKEN_STRING:
-    return PREC_PRIMARY;
-  default:
-    *is_valid_operator = false;
-    return -1;
-  }
-}
+#define RETURN_OP_NONE_MSG(msg)                                                \
+  do {                                                                         \
+    if (error && !*error) {                                                    \
+      *error = parser_error(context, tok.span, (msg));                         \
+    }                                                                          \
+    return OPERATOR_NONE;                                                      \
+  } while (0)
+
+#define RETURN_OP_NONE(kind)                                                   \
+  do {                                                                         \
+    char *buf;                                                                 \
+    asprintf(&buf, "unexpected %s operator token: %s", (kind),                 \
+             token_type_to_string(tok.type));                                  \
+    if (error && !*error)                                                      \
+      *error = parser_error(context, tok.span, buf);                           \
+    return OPERATOR_NONE;                                                      \
+  } while (0)
+
+Operator parse_operator(Lexer *lexer, Context *context,
+                        Expression_Type expr_type, Ast **error);
+
+Precedence get_precedence(Operator op, bool *is_valid_operator);
 
 Ast *parse_file(const char *filename, Context *context);
 

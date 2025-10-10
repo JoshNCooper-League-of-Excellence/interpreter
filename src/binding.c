@@ -88,3 +88,28 @@ Struct_Type *struct_type_alloc(Context *context, const char *name) {
   LIST_PUSH(context->type_table, (Type *)type);
   return type;
 }
+
+void context_initialize(Context *context) {
+
+  Type *string_type = type_alloc(context);
+  context->string_type = string_type;
+
+  string_type->name = "string";
+  string_type->tag = TYPE_STRING;
+
+  Type *integer_type = type_alloc(context);
+  context->integer_type = integer_type;
+
+  integer_type->name = "int";
+  integer_type->tag = TYPE_INT;
+
+  Type *void_type = type_alloc(context);
+  context->void_type = void_type;
+  void_type->name = "void";
+  void_type->tag = TYPE_VOID;
+
+  Type *bool_type = type_alloc(context);
+  context->bool_type = bool_type;
+  bool_type->name = "bool";
+  bool_type->tag = TYPE_BOOL;
+}

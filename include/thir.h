@@ -84,12 +84,12 @@ typedef struct Thir {
 
     struct {
       struct Thir *left, *right;
-      Token_Type op;
+      Operator op;
     } binary;
 
     struct {
       struct Thir *operand;
-      Token_Type op;
+      Operator op;
     } unary;
 
     struct Thir *variable_initializer;
@@ -117,8 +117,19 @@ Type *get_type_from_ast_type(struct Ast *, Context *context);
 #include "string_builder.h"
 
 static const char *thir_tag_names[] = {
-    "PROGRAM", "VARIABLE", "FUNCTION", "BLOCK", "LITERAL",
-    "UNARY",   "BINARY",   "RETURN",   "CALL",  "EXTERN"};
+  "PROGRAM",
+  "VARIABLE",
+  "FUNCTION",
+  "BLOCK",
+  "LITERAL",
+  "UNARY",
+  "BINARY",
+  "RETURN",
+  "CALL",
+  "EXTERN",
+  "AGGREGATE_INITIALIZER",
+  "MEMBER_ACCESS"
+};
 
 static inline void print_indent_ir(String_Builder *sb, int indent) {
   for (int i = 0; i < indent; ++i) {
@@ -221,7 +232,7 @@ static inline void print_ir_rec(Thir *node, String_Builder *sb, int indent) {
   case THIR_UNARY:
     print_indent_ir(sb, indent + 1);
     sb_append(sb, "op: ");
-    sb_append(sb, token_type_to_string(node->unary.op));
+    sb_append(sb, operator_to_string(node->unary.op));
     sb_append(sb, "\n");
     print_indent_ir(sb, indent + 1);
     sb_append(sb, "operand:\n");
@@ -230,7 +241,7 @@ static inline void print_ir_rec(Thir *node, String_Builder *sb, int indent) {
   case THIR_BINARY:
     print_indent_ir(sb, indent + 1);
     sb_append(sb, "op: ");
-    sb_append(sb, token_type_to_string(node->binary.op));
+    sb_append(sb, operator_to_string(node->binary.op));
     sb_append(sb, "\n");
     print_indent_ir(sb, indent + 1);
     sb_append(sb, "left:\n");

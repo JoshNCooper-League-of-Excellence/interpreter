@@ -9,44 +9,83 @@
 #include "type.h"
 #include "vm.h"
 #include <stddef.h>
+#include <string.h>
 
 const char *CURRENTLY_COMPILING_FILE_NAME = "<no filename>";
 Extern_Function_list CACHED_EXTERNS;
 
-#define LOG_LEVEL 0
-#define NO_LOGS 0
-#define LOG_AST 1
-#define LOG_THIR 2
-#define LOG_BINDINGS 3
-#define LOG_TAC 4
-#define LOG_MAX 4
+bool LOG_AST = false;
+bool LOG_THIR = false;
+bool LOG_BINDINGS = false;
+bool LOG_TAC = false;
+bool LOG_MAX = false;
 
 
 Cmd_Line_Args COMMAND_LINE_ARGUMENTS;
 
+static void set_log_flag(const char *level) {
+  if (!level || !*level)
+    return;
+  if (!strcmp(level, "ast")) {
+    LOG_AST = true;
+    return;
+  }
+  if (!strcmp(level, "thir")) {
+    LOG_THIR = true;
+    return;
+  }
+  if (!strcmp(level, "ir")) {
+    LOG_TAC = true;
+    return;
+  }
+  if (!strcmp(level, "all") || !strcmp(level, "max")) {
+    LOG_AST = LOG_THIR = LOG_BINDINGS = LOG_TAC = LOG_MAX = true;
+    return;
+  }
+  if (!strcmp(level, "none")) {
+    return;
+  } // default is false; do nothing
+}
+
+static void set_log_flags_from_arg(const char *arg) {
+  const char *p = arg;
+  while (*p) {
+    const char *slash = strchr(p, '/');
+    if (!slash) {
+      set_log_flag(p);
+      break;
+    } else {
+      size_t len = (size_t)(slash - p);
+      char buf[32];
+      if (len >= sizeof(buf))
+        len = sizeof(buf) - 1;
+      memcpy(buf, p, len);
+      buf[len] = 0;
+      set_log_flag(buf);
+      p = slash + 1;
+    }
+  }
+}
+
 int main(int argc, char *argv[]) {
-  COMMAND_LINE_ARGUMENTS = (Cmd_Line_Args){
-    .argc = argc - 1,
-    .argv = argv + 1
-  };
+  COMMAND_LINE_ARGUMENTS = (Cmd_Line_Args){.argc = argc - 1, .argv = argv + 1};
+
+  const char *output_path = nullptr;
+  for (int i = 1; i < argc; ++i) {
+    const char *arg = argv[i];
+    if (strncmp(arg, "-log=", 5) == 0) {
+      set_log_flags_from_arg(arg + 5);
+    } else if (strncmp(arg, "-o=", 3) == 0) {
+      output_path = arg + 3;
+    }
+  }
 
   CACHED_EXTERNS = (Extern_Function_list){0};
 
   Context context = {0};
+  context_initialize(&context);
 
-  context.string_type = type_alloc(&context);
-  context.string_type->name = "string";
-  context.string_type->tag = TYPE_STRING;
-
-  context.integer_type = type_alloc(&context);
-  context.integer_type->name = "int";
-  context.integer_type->tag = TYPE_INT;
-
-  Type *void_type = type_alloc(&context);
-  void_type->name = "void";
-  void_type->tag = TYPE_VOID;
-
-#if 0
+#if !DEBUG
   if (argc == 1) {
     fprintf(stderr, "expected filename argument. usage: bindings <filename.bi>\n");
     exit(1);
@@ -71,17 +110,21 @@ int main(int argc, char *argv[]) {
   }
 
   String_Builder sb = {0};
-  if (LOG_LEVEL >= LOG_AST) {
+  if (LOG_AST) {
     print_ast(ast_program, &sb);
+    printf("%s\n", sb.value);
+    sb_free(&sb);
   }
 
   Thir *typed_program = type_program(ast_program, &context);
 
-  if (LOG_LEVEL >= LOG_THIR) {
+  if (LOG_THIR) {
     print_ir(typed_program, &sb);
+    printf("%s\n", sb.value);
+    sb_free(&sb);
   }
 
-  if (LOG_LEVEL >= LOG_BINDINGS) {
+  if (LOG_BINDINGS) {
     LIST_FOREACH(context.bindings, binding) {
       printf("binding {\n");
       if (binding->name) {
@@ -98,19 +141,30 @@ int main(int argc, char *argv[]) {
       }
       printf("}\n");
     }
+    printf("%s\n", sb.value);
+    sb_free(&sb);
   }
 
   Module module = {0};
   module_init(&module, &context);
   lower_program(typed_program, &module);
 
-  if (LOG_LEVEL >= LOG_TAC) {
+  if (LOG_TAC || output_path) {
+    String_Builder sb = {0};
     print_module(&module, &sb);
-    printf("%s\n", sb.value);
-  }
-
-  if (LOG_LEVEL >= LOG_TAC) {
-    sb_free(&sb);
+    if (LOG_TAC) {
+      printf("%s\n", sb.value);
+    } else {
+      FILE *file = fopen(output_path, "w");
+      if ((file = fopen(output_path, "w"))) {
+        fwrite(sb.value, 1, sb.length, file);
+        fclose(file);
+      } else {
+        fprintf(stderr, "unable to open file %s to write IR.\n",
+                output_path);
+        exit(1);
+      }
+    }
   }
 
   vm_execute(&module);

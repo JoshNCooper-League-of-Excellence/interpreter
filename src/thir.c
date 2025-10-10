@@ -1,6 +1,7 @@
 #include "thir.h"
 #include "ast.h"
 #include "binding.h"
+#include "core.h"
 #include "lexer.h"
 #include "list.h"
 #include "string_builder.h"
@@ -250,13 +251,17 @@ Thir *type_literal(Ast *ast, Context *context) {
   Thir *literal = thir_alloc(context, THIR_LITERAL, ast->span);
 
   switch (ast->literal.tag) {
-  case INTEGER:
+  case AST_LITERAL_INTEGER:
     literal->literal.value = ast->literal.value;
     literal->type = context->integer_type;
     break;
-  case STRING:
+  case AST_LITERAL_STRING:
     literal->literal.value = ast->literal.value;
     literal->type = context->string_type;
+    break;
+  case AST_LITERAL_BOOL:
+    literal->literal.value = ast->literal.value;
+    literal->type = context->bool_type;
     break;
   }
 
@@ -388,12 +393,55 @@ Thir *type_binary(Ast *ast, Context *context) {
 
   Thir *left = type_expression(ast->binary.left, context);
   Thir *right = type_expression(ast->binary.right, context);
-  ;
+
+  switch (ast->binary.op) {
+  case OPERATOR_LOGICAL_OR:
+  case OPERATOR_LOGICAL_AND:
+  case OPERATOR_EQUALS:
+  case OPERATOR_NOT_EQUALS:
+  case OPERATOR_LESS:
+  case OPERATOR_GREATER:
+  case OPERATOR_LESS_EQUAL:
+    binary->type = context->bool_type;
+    break;
+
+  case OPERATOR_DEREFERENCE:
+  case OPERATOR_ADDRESS_OF:
+    TODO("Pointers not implemented, therefore & and * unarys are not "
+         "implemented");
+  case OPERATOR_INDEX:
+    TODO("Arrays not implemented, therefore [] index operators are not "
+         "implemented");
+  case OPERATOR_XOR:
+  case OPERATOR_PLUS_ASSIGN:
+  case OPERATOR_MINUS_ASSIGN:
+  case OPERATOR_STAR_ASSIGN:
+  case OPERATOR_SLASH_ASSIGN:
+  case OPERATOR_BIT_OR_ASSIGN:
+  case OPERATOR_BIT_AND_ASSIGN:
+  case OPERATOR_SHIFT_LEFT_ASSIGN:
+  case OPERATOR_SHIFT_RIGHT_ASSIGN:
+  case OPERATOR_NEGATE:
+  case OPERATOR_ASSIGN:
+  case OPERATOR_BIT_AND:
+  case OPERATOR_BIT_OR:
+  case OPERATOR_GREATER_EQUAL:
+  case OPERATOR_SHIFT_LEFT:
+  case OPERATOR_SHIFT_RIGHT:
+  case OPERATOR_ADD:
+  case OPERATOR_SUB:
+  case OPERATOR_MUL:
+  case OPERATOR_DIV:
+  case OPERATOR_LOGICAL_NOT:
+  case OPERATOR_BIT_NOT:
+    break;
+  default:
+    break;
+  }
 
   binary->binary.op = ast->binary.op;
   binary->binary.left = left;
   binary->binary.right = right;
-  binary->type = left->type; // TODO: don't just inherit the LHS type.
 
   return binary;
 }

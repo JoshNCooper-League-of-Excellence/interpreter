@@ -1,4 +1,5 @@
 #include "tac.h"
+#include "ast.h"
 #include "binding.h"
 #include "lexer.h"
 #include "list.h"
@@ -14,17 +15,36 @@
 */
 
 unsigned add_constant(Module *m, Thir *thir) {
-  Constant_Type type = CONST_INTEGER;
+  Constant_Type type = CONST_TYPE_INT;
 
-  if (thir->type->tag == TYPE_STRING) {
-    type = CONST_STRING;
-  } else if (thir->type->tag == TYPE_INT) {
-    type = CONST_INTEGER;
-  } else {
+  bool is_bool =
+      thir->type->tag == TYPE_BOOL; // convert "true" and "false" to 1 and 0
+  switch (thir->type->tag) {
+  case TYPE_INT:
+    type = CONST_TYPE_INT;
+    break;
+  case TYPE_STRING:
+    type = CONST_TYPE_STRING;
+    break;
+  case TYPE_BOOL:
+    type = CONST_TYPE_INT;
+    break;
+  default:
     assert(false && "[TAC]: invalid constant type, expected 'int' or 'string'");
   }
 
   const char *value = thir->literal.value;
+
+  if (is_bool) {
+    if (strncmp("true", value, 4) == 0) {
+      value = "1";
+    } else if (strncmp("false", value, 5) == 0) {
+      value = "0";
+    } else {
+      assert(false &&
+             "[TAC]: invalid constant bool, expected 'true' or 'false'");
+    }
+  }
 
   // We already have a constant that matches this one, re-use it.
   LIST_FOREACH(m->constants, constant) {
@@ -54,11 +74,8 @@ int generate_temp(Function *fn) { return (int)(fn->n_locals++); }
 
 DEFINE_LIST(int);
 
-// Collects member indices from a chained member access and returns the base
-// expr. path is filled from leaf-to-root; function also builds root-to-leaf
-// order.
-static int collect_member_path(Thir *n, int leaf_to_root[], int max_depth,
-                               Thir **out_base) {
+int collect_member_path(Thir *n, int leaf_to_root[], int max_depth,
+                        Thir **out_base) {
   int depth = 0;
   Thir *cur = n;
   while (cur->tag == THIR_MEMBER_ACCESS) {
@@ -70,7 +87,7 @@ static int collect_member_path(Thir *n, int leaf_to_root[], int max_depth,
   return depth;
 }
 
-static int lower_member_rvalue(Thir *n, Function *fn, Module *m) {
+int lower_member_rvalue(Thir *n, Function *fn, Module *m) {
   int leaf_to_root[32];
   Thir *base = NULL;
   int depth = collect_member_path(n, leaf_to_root, 32, &base);
@@ -93,8 +110,7 @@ static int lower_member_rvalue(Thir *n, Function *fn, Module *m) {
   return obj;
 }
 
-// Lower assignment into a (possibly chained) member LHS: a.b.c = rhs
-static int lower_member_assignment(Thir *lhs, int rhs, Function *fn) {
+int lower_member_assignment(Thir *lhs, int rhs, Function *fn) {
   int leaf_to_root[32];
   Thir *base = NULL;
   int depth = collect_member_path(lhs, leaf_to_root, 32, &base);
@@ -140,8 +156,49 @@ static int lower_member_assignment(Thir *lhs, int rhs, Function *fn) {
   return rhs; // assignment expression result
 }
 
+int lower_get_lvalue_value(Thir *lhs, Function *fn, Module *m) {
+  switch (lhs->tag) {
+  case THIR_MEMBER_ACCESS:
+    return lower_member_rvalue(lhs, fn, m);
+  case THIR_VARIABLE: {
+    int tmp = generate_temp(fn);
+    EMIT_LOAD(&fn->code, tmp, (int)lhs->binding->index);
+    return tmp;
+  }
+  default: {
+    char *msg;
+    asprintf(&msg, "lower_get_lvalue_value: unsupported lvalue tag %d at %s",
+             lhs->tag, lexer_span_to_string(lhs->span));
+    fprintf(stderr, "%s\n", msg);
+    free(msg);
+    exit(EXIT_FAILURE);
+  }
+  }
+}
+
+void lower_set_lvalue_value(Thir *lhs, int value, Function *fn) {
+  switch (lhs->tag) {
+  case THIR_MEMBER_ACCESS:
+    (void)lower_member_assignment(lhs, value, fn);
+    return;
+  case THIR_VARIABLE:
+    EMIT_STORE(&fn->code, (int)lhs->binding->index, value);
+    return;
+  default: {
+    char *msg;
+    asprintf(&msg, "lower_set_lvalue_value: unsupported lvalue tag %d at %s",
+             lhs->tag, lexer_span_to_string(lhs->span));
+    fprintf(stderr, "%s\n", msg);
+    free(msg);
+    exit(EXIT_FAILURE);
+  }
+  }
+}
+
 int lower_lvalue_slot(Thir *n) {
   switch (n->tag) {
+  case THIR_MEMBER_ACCESS:
+
   case THIR_VARIABLE:
     return (int)n->binding->index;
   default:
@@ -182,37 +239,120 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
     return dest;
   }
   case THIR_BINARY: {
-    if (n->binary.op == TOKEN_ASSIGN) {
-      int r = lower_expression(n->binary.right, fn, m);
-      if (n->binary.left->tag == THIR_MEMBER_ACCESS) {
-        return lower_member_assignment(n->binary.left, r, fn);
+    if (n->binary.op == OPERATOR_ASSIGN) {
+      int rhs = lower_expression(n->binary.right, fn, m);
+      lower_set_lvalue_value(n->binary.left, rhs, fn);
+      return rhs;
+    }
+
+    if (operator_is_compound(n->binary.op)) {
+      int lhs_val = lower_get_lvalue_value(n->binary.left, fn, m);
+      int rhs = lower_expression(n->binary.right, fn, m);
+      int res = generate_temp(fn);
+
+      switch (n->binary.op) {
+      case OPERATOR_PLUS_ASSIGN:
+        EMIT_ADD(&fn->code, res, lhs_val, rhs);
+        break;
+      case OPERATOR_MINUS_ASSIGN:
+        EMIT_SUB(&fn->code, res, lhs_val, rhs);
+        break;
+      case OPERATOR_STAR_ASSIGN:
+        EMIT_MUL(&fn->code, res, lhs_val, rhs);
+        break;
+      case OPERATOR_SLASH_ASSIGN:
+        EMIT_DIV(&fn->code, res, lhs_val, rhs);
+        break;
+      case OPERATOR_BIT_OR_ASSIGN:
+        EMIT_BIT_OR(&fn->code, res, lhs_val, rhs);
+        break;
+      case OPERATOR_BIT_AND_ASSIGN:
+        EMIT_BIT_AND(&fn->code, res, lhs_val, rhs);
+        break;
+      case OPERATOR_SHIFT_LEFT_ASSIGN:
+        EMIT_SHIFT_LEFT(&fn->code, res, lhs_val, rhs);
+        break;
+      case OPERATOR_SHIFT_RIGHT_ASSIGN:
+        EMIT_SHIFT_RIGHT(&fn->code, res, lhs_val, rhs);
+        break;
+      default:
+        fprintf(stderr, "lower_expression: unhandled compound op %d\n",
+                n->binary.op);
+        exit(1);
       }
-      int l = lower_lvalue_slot(n->binary.left);
-      EMIT_STORE(&fn->code, l, r);
-      return l;
+
+      lower_set_lvalue_value(n->binary.left, res, fn);
+      return res;
     }
 
     int l = lower_expression(n->binary.left, fn, m);
     int r = lower_expression(n->binary.right, fn, m);
     int dest = generate_temp(fn);
+
     switch (n->binary.op) {
-    case TOKEN_PLUS:
+    case OPERATOR_ADD:
       EMIT_ADD(&fn->code, dest, l, r);
       break;
-    case TOKEN_MINUS:
+    case OPERATOR_SUB:
       EMIT_SUB(&fn->code, dest, l, r);
       break;
-    case TOKEN_STAR:
+    case OPERATOR_MUL:
       EMIT_MUL(&fn->code, dest, l, r);
       break;
-    case TOKEN_SLASH:
+    case OPERATOR_DIV:
       EMIT_DIV(&fn->code, dest, l, r);
+      break;
+    case OPERATOR_LOGICAL_OR:
+      EMIT_LOGICAL_OR(&fn->code, dest, l, r);
+      break;
+    case OPERATOR_LOGICAL_AND:
+      EMIT_LOGICAL_AND(&fn->code, dest, l, r);
+      break;
+    case OPERATOR_BIT_OR:
+      EMIT_BIT_OR(&fn->code, dest, l, r);
+      break;
+    case OPERATOR_BIT_AND:
+      EMIT_BIT_AND(&fn->code, dest, l, r);
+      break;
+    case OPERATOR_XOR:
+      EMIT_XOR(&fn->code, dest, l, r);
+      break;
+    case OPERATOR_EQUALS:
+      EMIT_EQUALS(&fn->code, dest, l, r);
+      break;
+    case OPERATOR_NOT_EQUALS:
+      EMIT_NOT_EQUALS(&fn->code, dest, l, r);
+      break;
+    case OPERATOR_LESS:
+      EMIT_LESS(&fn->code, dest, l, r);
+      break;
+    case OPERATOR_GREATER:
+      EMIT_GREATER(&fn->code, dest, l, r);
+      break;
+    case OPERATOR_LESS_EQUAL: {
+      int tmp = generate_temp(fn);
+      EMIT_GREATER(&fn->code, tmp, l, r);
+      EMIT_LOGICAL_NOT(&fn->code, dest, tmp);
+      break;
+    }
+    case OPERATOR_GREATER_EQUAL: {
+      int tmp = generate_temp(fn);
+      EMIT_LESS(&fn->code, tmp, l, r);
+      EMIT_LOGICAL_NOT(&fn->code, dest, tmp);
+      break;
+    }
+    case OPERATOR_SHIFT_LEFT:
+      EMIT_SHIFT_LEFT(&fn->code, dest, l, r);
+      break;
+    case OPERATOR_SHIFT_RIGHT:
+      EMIT_SHIFT_RIGHT(&fn->code, dest, l, r);
       break;
     default:
       fprintf(stderr, "lower_expression: unhandled binary op %d\n",
               n->binary.op);
       break;
     }
+
     return dest;
   }
   case THIR_CALL: {
@@ -393,19 +533,18 @@ void print_module(Module *m, String_Builder *sb) {
     Type *type = m->types.data[i];
     if (type->tag == TYPE_STRUCT) {
       Struct_Type *struct_type = (Struct_Type *)type;
-      sb_appendf(sb, "[%zu]: struct %s {\n", i, type->name);
+      sb_appendf(sb, "\t[%zu]: struct %s {\n", i, type->name);
       LIST_FOREACH(struct_type->members, member) {
-        sb_appendf(sb, "  [%zu]: %s\n", __i, member.type->name);
+        sb_appendf(sb, "\t\t[%zu]: %s\n", __i, member.type->name);
       }
-      sb_append(sb, "}\n");
+      sb_append(sb, "\t     }\n");
     }
   }
 
   sb_append(sb, "CONSTANTS:\n");
   LIST_FOREACH(m->constants, constant) {
     sb_appendf(sb, "\t[%d]: { type: %s, value: \"%s\" }\n", __i,
-               constant.type == CONST_INTEGER ? "int" : "string",
-               constant.value);
+               constant_type_to_string(constant.type), constant.value);
   }
 
   sb_append(sb, "FUNCTIONS:\n");
