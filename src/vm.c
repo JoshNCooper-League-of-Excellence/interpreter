@@ -217,19 +217,11 @@ void vm_execute(Module *m) {
       }
       Extern_Function callee = CACHED_EXTERNS.data[func_idx];
 
-      /* slice the arg stack for this call: the last `nargs` pushed entries */
       int base = arg_p - nargs;
       if (base < 0) {
         VM_ERRF("not enough arguments on arg stack for extern call (need=%d "
                 "have=%d)",
                 nargs, arg_p);
-      }
-
-      for (int i = 0; i < nargs; ++i) {
-        String_Builder sb = {0};
-        print_value(&arg_stack[base + i], &sb);
-        printf("arg[%d] = %s\n", i, sb.value);
-        sb_free(&sb);
       }
 
       Value value = libffi_dynamic_dispatch(callee, &arg_stack[base], nargs);
@@ -252,12 +244,20 @@ void vm_execute(Module *m) {
         VM_ERRF("call stack overflow");
       }
 
+      int base = arg_p - nargs;
+      if (base < 0) {
+        VM_ERRF("not enough arguments on arg stack for call (need=%d have=%d)",
+                nargs, arg_p);
+      }
+
       int new_sp = sp + 1;
       call_stack[new_sp] = enter(callee, dest, sp);
       for (int i = 0; i < nargs; ++i) {
         call_stack[new_sp].locals[i] = arg_stack[i];
+        call_stack[new_sp].locals[i] = arg_stack[base + i];
       }
       arg_p = 0;
+      arg_p = base;
       sp = new_sp;
     } break;
     case OP_RET: {
@@ -445,13 +445,13 @@ Extern_Function get_ffi_function_from_thir(Thir *thir) {
 
   Function_Type *type = (Function_Type *)thir->type;
 
-  Extern_Function extern_function = {
-      .name = thir->extern_function.name,
-      .parameters = {0},
-      .return_type = type_to_ffi_type(type->returns),
-      .index = CACHED_EXTERNS.length,
-      .ptr = symbol,
-      .original_return_type = type->returns};
+  Extern_Function extern_function = {.name = thir->extern_function.name,
+                                     .parameters = {0},
+                                     .return_type =
+                                         type_to_ffi_type(type->returns),
+                                     .index = CACHED_EXTERNS.length,
+                                     .ptr = symbol,
+                                     .original_return_type = type->returns};
 
   LIST_FOREACH(type->parameters, parameter) {
     LIST_PUSH(extern_function.parameters, type_to_ffi_type(parameter));
