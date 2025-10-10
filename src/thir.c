@@ -5,7 +5,6 @@
 #include "list.h"
 #include "string_builder.h"
 #include "type.h"
-#include "vm.h"
 #include <dlfcn.h>
 #include <ffi.h>
 
@@ -314,6 +313,43 @@ Thir *type_block(Ast *ast, Context *context) {
 
 Thir *type_expression(Ast *ast, Context *context) {
   switch (ast->tag) {
+  case AST_MEMBER_ACCESS: {
+    Thir *base = type_expression(ast->member_access.base, context);
+    Thir *thir = thir_alloc(context, THIR_MEMBER_ACCESS, ast->span);
+    thir->member_access.base = base;
+    thir->member_access.member = ast->member_access.member;
+
+    Type *base_type = base->type;
+
+    if (base_type->tag != TYPE_STRUCT) {
+      char *buf;
+      asprintf(&buf, "error: member access only allowed for structs at: %s",
+               lexer_span_to_string(ast->span));
+      fprintf(stderr, "%s\n", buf);
+      exit(1);
+    }
+
+    Struct_Type *struct_type = (Struct_Type*)base_type;
+    bool found = false;
+    
+    LIST_FOREACH(struct_type->members, member) {
+      if (strcmp(member.name, thir->member_access.member) == 0) {
+        thir->type = member.type;
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      char *buf;
+      asprintf(&buf, "error: member '%s' not found in struct at: %s",
+               thir->member_access.member, lexer_span_to_string(ast->span));
+      fprintf(stderr, "%s\n", buf);
+      exit(1);
+    }
+
+    return thir;
+  } break;
   case AST_AGGREGATE_INITIALIZER:
     return type_aggregate_initializer(ast, context);
   case AST_CALL:
@@ -485,180 +521,6 @@ Thir *type_variable(Ast *ast, Context *context) {
   var->variable_initializer = initializer;
 
   return var;
-}
-
-ffi_type type_to_ffi_type(Type *type) {
-  switch (type->tag) {
-  case TYPE_INT:
-    return ffi_type_sint32;
-  case TYPE_STRING:
-    return ffi_type_pointer;
-  case TYPE_VOID:
-    return ffi_type_void;
-  default:
-    fprintf(stderr, "unable to use type: %s with libffi\n", type->name);
-    exit(1);
-  }
-}
-
-Extern_Function get_ffi_function_from_thir(Thir *thir) {
-  LIST_FOREACH(CACHED_EXTERNS, cached) {
-    if (cached.name == thir->extern_function.name) {
-      return cached;
-    }
-  }
-
-  const char *LIB_SEARCH_PATHS[] = {"libm.so.6",
-                                    "libm.so",
-                                    "libc.so.6",
-                                    "libc.so",
-                                    "/home/josh/source/c/bindings/libb.so",
-                                    NULL};
-
-  static struct {
-    const char *name;
-    void *handle;
-  } open_libs[16] = {};
-  static int open_libs_count = 0;
-
-  void *handle = NULL;
-  void *symbol = NULL;
-
-  for (const char **p = LIB_SEARCH_PATHS; *p != NULL; ++p) {
-    int found = 0;
-    for (int i = 0; i < open_libs_count; ++i) {
-      if (strcmp(open_libs[i].name, *p) == 0) {
-        handle = open_libs[i].handle;
-        found = 1;
-        break;
-      }
-    }
-    if (!found) {
-      handle = dlopen(*p, RTLD_NOW);
-      if (handle) {
-
-        if (open_libs_count < (int)(sizeof(open_libs) / sizeof(open_libs[0]))) {
-          open_libs[open_libs_count].name = *p;
-          open_libs[open_libs_count].handle = handle;
-          ++open_libs_count;
-        } else {
-          fprintf(stderr, "unable to open dynamic library for ffi: too many "
-                          "libraries open\n");
-          exit(1);
-        }
-      }
-    }
-
-    if (!handle) {
-      continue;
-    }
-
-    dlerror();
-    symbol = dlsym(handle, thir->extern_function.name);
-
-    if (symbol) {
-      break;
-    }
-  }
-
-  if (!symbol) {
-    fprintf(stderr, "unable to find symbol '%s' in system libraries\n",
-            thir->extern_function.name);
-    exit(1);
-  }
-
-  Function_Type *type = (Function_Type *)thir->type;
-
-  Extern_Function extern_function = {
-      .name = thir->extern_function.name,
-      .parameters = {0},
-      .return_type = type_to_ffi_type(thir->function.return_type),
-      .index = CACHED_EXTERNS.length,
-      .ptr = symbol,
-      .original_return_type = type->returns};
-
-  LIST_FOREACH(thir->extern_function.parameters, parameter) {
-    LIST_PUSH(extern_function.parameters, type_to_ffi_type(parameter->type));
-  }
-
-  LIST_PUSH(CACHED_EXTERNS, extern_function);
-
-  return extern_function;
-}
-
-Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc) {
-  ffi_cif cif;
-
-  if (!function.ptr) {
-    fprintf(stderr, "[VM:FFI] error: function.ptr is (nil) for extern '%s'\n",
-            function.name);
-    exit(1);
-  }
-
-  size_t n_params = function.parameters.length;
-  ffi_type *arg_types[n_params ? n_params : 1];
-  void *arg_values[n_params ? n_params : 1];
-
-  if ((size_t)argc < n_params) {
-    fprintf(stderr,
-            "[VM:FFI] attempted to call \"%s\" via 'extern', but too few "
-            "arguments were "
-            "provided. got=%d need=%zu\n",
-            function.name, argc, n_params);
-    exit(1);
-  }
-
-  for (size_t i = 0; i < n_params; ++i) {
-    arg_types[i] = &function.parameters.data[i];
-    Value *v = &argv[i];
-    switch (v->type) {
-    case VALUE_INTEGER:
-      arg_values[i] = &v->integer;
-      break;
-    case VALUE_STRING:
-      arg_values[i] = &v->string;
-      break;
-    default:
-      fprintf(stderr, "[VM:FFI] unsupported argument type for extern call\n");
-      exit(1);
-    }
-  }
-
-  ffi_type *ffi_return_type = &function.return_type;
-
-  int int_buf = 0;
-  char *string_buf = NULL;
-  void *return_buf = NULL;
-
-  int return_type = function.original_return_type->tag;
-
-  if (return_type == TYPE_INT) {
-    return_buf = &int_buf;
-  } else if (return_type == TYPE_STRING) {
-    return_buf = &string_buf;
-  } else if (return_type == TYPE_VOID) {
-    return_buf = NULL;
-  }
-
-  int prep = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned)n_params,
-                          ffi_return_type, arg_types);
-  if (prep != FFI_OK) {
-    fprintf(stderr, "[VM:FFI] ffi_prep_cif failed: %d\n", prep);
-    exit(1);
-  }
-
-  ffi_call(&cif, function.ptr, return_buf, arg_values);
-
-  if (return_type == TYPE_INT) {
-    return (Value){.type = VALUE_INTEGER, .integer = int_buf};
-  } else if (return_type == TYPE_STRING) {
-    return (Value){.type = VALUE_STRING, .string = string_buf};
-  } else if (return_type == TYPE_VOID) {
-    return (Value){.type = VALUE_VOID};
-  }
-
-  fprintf(stderr, "[VM:FFI] no return type was specified\n");
-  exit(1);
 }
 
 Thir *type_aggregate_initializer(Ast *ast, Context *context) {

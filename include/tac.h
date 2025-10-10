@@ -17,7 +17,7 @@ typedef enum {
   OP_CALL,
   OP_CALL_EXTERN,
   OP_RET,
-  OP_ARG,
+  OP_PUSH,
   OP_ALLOCA,
   OP_MEMBER_LOAD,
   OP_MEMBER_STORE,
@@ -72,7 +72,7 @@ typedef struct {
   Type_Ptr_list types;
 } Module;
 
-void initialize_module(Module *m, Context *context);
+void module_init(Module *m, Context *context);
 
 #define EMIT($instruction_buffer, $instruction)                                \
   LIST_PTR_PUSH($instruction_buffer, $instruction);
@@ -82,7 +82,7 @@ void initialize_module(Module *m, Context *context);
 #define MAKE_INSTR2(op, a, b) ((Instr){(op), (a), (b), 0})
 #define MAKE_INSTR3(op, a, b, c) ((Instr){(op), (a), (b), (c)})
 
-#define EMIT_ARG(buf, index, src) EMIT(buf, MAKE_INSTR2(OP_ARG, (index), (src)))
+#define EMIT_PUSH(buf, src) EMIT(buf, MAKE_INSTR1(OP_PUSH, (src)))
 
 #define EMIT_CONST(buf, dest, const_idx)                                       \
   EMIT(buf, MAKE_INSTR2(OP_CONST, (dest), (const_idx)))
@@ -107,6 +107,9 @@ void initialize_module(Module *m, Context *context);
 
 #define EMIT_CALL(buf, dest, func, narg)                                       \
   EMIT(buf, MAKE_INSTR3(OP_CALL, (dest), (func), (narg)))
+
+#define EMIT_CALL_EXTERN(buf, dest, index, nargs)\
+  EMIT(buf, MAKE_INSTR3(OP_CALL_EXTERN, (dest), (index), (nargs)))
 
 #define EMIT_RET(buf, src) EMIT(buf, MAKE_INSTR1(OP_RET, (src)))
 

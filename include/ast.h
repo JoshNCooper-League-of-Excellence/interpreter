@@ -22,6 +22,7 @@ typedef enum {
   AST_TYPE,
   AST_AGGREGATE_INITIALIZER,
   AST_STRUCT,
+  AST_MEMBER_ACCESS,
 } Ast_Tag;
 
 typedef struct {
@@ -57,6 +58,11 @@ typedef struct Ast {
       const char *name;
       Ast_Struct_Member_list members;
     } $struct;
+
+    struct {
+      struct Ast *base;
+      const char *member;
+    } member_access;
 
     struct {
       string_list keys;
@@ -144,7 +150,15 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   sb_append(sb, "\n");
 
   switch (node->tag) {
-
+  case AST_MEMBER_ACCESS:
+    print_indent(sb, indent + 1);
+    sb_append(sb, "base:\n");
+    print_ast_rec(node->member_access.base, sb, indent + 2);
+    print_indent(sb, indent + 1);
+    sb_append(sb, "member: ");
+    sb_append(sb, node->member_access.member);
+    sb_append(sb, "\n");
+    break;
   case AST_STRUCT:
     print_indent(sb, indent + 1);
     sb_append(sb, "members:\n");

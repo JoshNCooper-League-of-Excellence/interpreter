@@ -17,6 +17,7 @@ typedef enum {
   THIR_CALL,
   THIR_EXTERN,
   THIR_AGGREGATE_INITIALIZER,
+  THIR_MEMBER_ACCESS,
 } Thir_Tag;
 
 #include "ffi.h"
@@ -51,6 +52,11 @@ typedef struct Thir {
       Thir_Ptr_list values;
       string_list keys;
     } aggregate_initializer;
+
+    struct {
+      struct Thir *base;
+      const char *member;
+    } member_access;
 
     struct {
       Type *return_type;
@@ -131,6 +137,15 @@ static inline void print_ir_rec(Thir *node, String_Builder *sb, int indent) {
   sb_append(sb, "\n");
 
   switch (node->tag) {
+  case THIR_MEMBER_ACCESS:
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "base:\n");
+    print_ir_rec(node->member_access.base, sb, indent + 2);
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "member: ");
+    sb_append(sb, node->member_access.member);
+    sb_append(sb, "\n");
+    break;
   case THIR_AGGREGATE_INITIALIZER:
     print_indent_ir(sb, indent + 1);
     sb_append(sb, "values:\n");

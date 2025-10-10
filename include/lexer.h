@@ -43,6 +43,7 @@ typedef enum {
   TOKEN_ASSIGN,
 
   TOKEN_STRUCT,
+  TOKEN_DOT,
 } Token_Type;
 
 static inline const char *token_type_to_string(Token_Type type) {
@@ -284,6 +285,9 @@ static inline Token lexer_gettok(Lexer *lexer) {
         return (Token){nullptr, false, TOKEN_STAR,
                        .span = {begin_line, begin_col, 1, start}};
       case '=':
+        return (Token){nullptr, false, TOKEN_ASSIGN,
+                       .span = {begin_line, begin_col, 1, start}};
+      case '.':
         return (Token){nullptr, false, TOKEN_ASSIGN,
                        .span = {begin_line, begin_col, 1, start}};
       case ':':

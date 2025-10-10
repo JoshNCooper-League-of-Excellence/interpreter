@@ -168,6 +168,20 @@ Ast *parse_call(const char *callee, Lexer *lexer, Context *context) {
   return call;
 }
 
+Ast *parse_postfix(Lexer *lexer, Context *context) {
+  Ast *operand = parse_primary(lexer, context);
+  while (lexer_next(lexer) == TOKEN_DOT) {
+    BEGIN_SPAN(lexer_eat(lexer));
+    Token member = EXPECT(TOKEN_IDENTIFIER);
+    END_SPAN()
+    Ast *member_access = ast_alloc(context, AST_MEMBER_ACCESS, span);
+    member_access->member_access.base = operand;
+    member_access->member_access.member = member.value;
+    operand = member_access;
+  }
+  return operand;
+}
+
 Ast *parse_primary(Lexer *lexer, Context *context) {
   Token peeked = lexer_peek(lexer);
   BEGIN_SPAN(peeked);
@@ -213,8 +227,7 @@ Ast *parse_primary(Lexer *lexer, Context *context) {
 
 Ast *parse_binary(Lexer *lexer, Context *context, Precedence precedence) {
   BEGIN_SPAN(lexer_peek(lexer));
-  Ast *left = OK(parse_primary(lexer, context));
-
+  Ast *left = OK(parse_postfix(lexer, context));
   while (true) {
     Token op = lexer_peek(lexer);
     bool is_valid_operator = false;
@@ -246,6 +259,8 @@ Ast *parse_identifier(Lexer *lexer, Context *context) {
     return parse_function(lexer, context);
   } else if (one_ahead.type == TOKEN_LPAREN) {
     return parse_expression(lexer, context); // Function call
+  } else if (one_ahead.type == TOKEN_ASSIGN) {
+    return parse_expression(lexer, context);
   } else {
     return parser_error(context, lexer_span(lexer),
                         "invalid identifier statement. expected variable or "

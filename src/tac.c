@@ -54,6 +54,21 @@ int generate_temp(Function *fn) { return (int)(fn->n_locals++); }
 
 DEFINE_LIST(int);
 
+int lower_lvalue_slot(Thir *n) {
+  switch (n->tag) {
+  case THIR_VARIABLE:
+    return (int)n->binding->index;
+    return true;
+  default:
+    char *msg;
+    asprintf(&msg, "lower_lvalue: unsupported lvalue tag %d at %s", n->tag,
+             lexer_span_to_string(n->span));
+    fprintf(stderr, "%s\n", msg);
+    free(msg);
+    exit(EXIT_FAILURE);
+  }
+}
+
 int lower_expression(Thir *n, Function *fn, Module *m) {
   assert(n && "null expression while lowering");
   switch (n->tag) {
@@ -79,6 +94,13 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
     return dest;
   }
   case THIR_BINARY: {
+    if (n->binary.op == TOKEN_ASSIGN) {
+      int l = lower_lvalue_slot(n->binary.left);
+      int r = lower_expression(n->binary.right, fn, m);
+      EMIT_STORE(&fn->code, l, r);
+      return l;
+    }
+
     int l = lower_expression(n->binary.left, fn, m);
     int r = lower_expression(n->binary.right, fn, m);
     int dest = generate_temp(fn);
@@ -103,28 +125,24 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
     return dest;
   }
   case THIR_CALL: {
-    int nargs = (int)n->call.arguments.length;
 
-    for (unsigned i = 0; i < n->call.arguments.length; ++i) {
-      int dest = lower_expression(n->call.arguments.data[i], fn, m);
-      EMIT_ARG(&fn->code, i, dest);
+    int nargs = n->call.arguments.length;
+
+    LIST_FOREACH(n->call.arguments, argument) {
+      int dest = lower_expression(argument, fn, m);
+      EMIT_PUSH(&fn->code, dest);
     }
 
     int dest = generate_temp(fn);
-
     assert(n->call.callee && "null callee while lowering");
 
     if (n->call.callee->thir->tag == THIR_EXTERN) {
-      Instr instr = {.op = OP_CALL_EXTERN,
-                     .a = dest,
-                     .b = n->call.callee->thir->extern_function.index,
-                     .c = nargs};
-      EMIT(&fn->code, instr);
+      EMIT_CALL_EXTERN(&fn->code, dest,
+                       n->call.callee->thir->extern_function.index, nargs);
     } else {
       int func_idx = (int)n->call.callee->index;
       EMIT_CALL(&fn->code, dest, func_idx, nargs);
     }
-
     return dest;
   }
   case THIR_UNARY: {
@@ -136,13 +154,18 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
   }
   default:
     fprintf(stderr, "lower_expr: unhandled THIR tag %d\n", n->tag);
-    return 0;
+    exit(1);
   }
 }
 
 void lower_block(Thir *block, Function *fn, Module *m) {
   LIST_FOREACH(block->block, stmt) {
     switch (stmt->tag) {
+    case THIR_BINARY: {
+      // dot expressions assignment, ignored result.
+      lower_expression(stmt, fn, m);
+      break;
+    }
     case THIR_RETURN: {
       if (stmt->return_value) {
         int tmp = lower_expression(stmt->return_value, fn, m);
@@ -153,14 +176,16 @@ void lower_block(Thir *block, Function *fn, Module *m) {
       break;
     }
     case THIR_VARIABLE: {
+      int slot = (int)fn->n_locals++;
+      stmt->binding->index = (size_t)slot;
       int src = lower_expression(stmt->variable_initializer, fn, m);
-      EMIT_STORE(&fn->code, (int)stmt->binding->index, src);
+      EMIT_STORE(&fn->code, slot, src);
       break;
     }
     case THIR_CALL:
     case THIR_LITERAL:
       lower_expression(stmt, fn, m);
-      return;
+      break;
     default: {
       assert(false && "unexpected THIR node in block while lowering");
       break;
@@ -261,7 +286,7 @@ void print_instr(Instr *i, String_Builder *sb) {
   case OP_RET:
     sb_appendf(sb, "RET t%d", i->a);
     break;
-  case OP_ARG:
+  case OP_PUSH:
     sb_appendf(sb, "ARG i=%d, src=t%d", i->a, i->b);
     break;
   default:
@@ -303,6 +328,6 @@ void print_module(Module *m, String_Builder *sb) {
   }
 }
 
-void initialize_module(Module *m, Context *context) {
+void module_init(Module *m, Context *context) {
   m->types = context->type_table;
 }

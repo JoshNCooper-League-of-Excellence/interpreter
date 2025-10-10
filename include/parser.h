@@ -41,6 +41,7 @@ Ast *parse_file(const char *filename, Context *context);
 Ast *parse_program(Lexer *lexer, Context *context);
 
 Ast *parse_primary(Lexer *lexer, Context *context);
+Ast *parse_postfix(Lexer *lexer, Context *context);
 Ast *parse_binary(Lexer *lexer, Context *context, Precedence precedence);
 Ast *parse_expression(Lexer *lexer, Context *context);
 

@@ -8,9 +8,10 @@ struct Vec3 {
 }
 
 main :: (args string) int {
-  Vec3 vec3 = { 0, 0, 0 }; 
+  // Vec3 vec3 = { 0, 0, 0 }; 
   int x = {100};
   int y = x + 100;
+  // x = 0;
   printf("Hello, World! x=%d, y=%d\n", x, y);
   return 0;
 }
