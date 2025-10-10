@@ -54,11 +54,96 @@ int generate_temp(Function *fn) { return (int)(fn->n_locals++); }
 
 DEFINE_LIST(int);
 
+// Collects member indices from a chained member access and returns the base
+// expr. path is filled from leaf-to-root; function also builds root-to-leaf
+// order.
+static int collect_member_path(Thir *n, int leaf_to_root[], int max_depth,
+                               Thir **out_base) {
+  int depth = 0;
+  Thir *cur = n;
+  while (cur->tag == THIR_MEMBER_ACCESS) {
+    assert(depth < max_depth && "member access chain too deep");
+    leaf_to_root[depth++] = (int)cur->member_access.index;
+    cur = cur->member_access.base;
+  }
+  *out_base = cur;
+  return depth;
+}
+
+static int lower_member_rvalue(Thir *n, Function *fn, Module *m) {
+  int leaf_to_root[32];
+  Thir *base = NULL;
+  int depth = collect_member_path(n, leaf_to_root, 32, &base);
+
+  int obj;
+  if (base->tag == THIR_VARIABLE) {
+    obj = generate_temp(fn);
+    EMIT_LOAD(&fn->code, obj, (int)base->binding->index);
+  } else {
+    // Non-variable base (e.g. call returning a struct)
+    obj = lower_expression(base, fn, m);
+  }
+
+  // Traverse from root to leaf: reverse the leaf_to_root order.
+  for (int i = depth - 1; i >= 0; --i) {
+    int tmp = generate_temp(fn);
+    EMIT_MEMBER_LOAD(&fn->code, tmp, obj, leaf_to_root[i]);
+    obj = tmp;
+  }
+  return obj;
+}
+
+// Lower assignment into a (possibly chained) member LHS: a.b.c = rhs
+static int lower_member_assignment(Thir *lhs, int rhs, Function *fn) {
+  int leaf_to_root[32];
+  Thir *base = NULL;
+  int depth = collect_member_path(lhs, leaf_to_root, 32, &base);
+  assert(depth > 0 && "expected member chain for member assignment");
+
+  // Root-to-leaf order
+  int path[32];
+  for (int i = 0; i < depth; ++i)
+    path[i] = leaf_to_root[depth - 1 - i];
+
+  // Only variables are assignable as the root container for now.
+  assert(base->tag == THIR_VARIABLE && "assignment to non-lvalue member base");
+
+  int slot = (int)base->binding->index;
+
+  // Load the top-level struct value
+  int obj0 = generate_temp(fn);
+  EMIT_LOAD(&fn->code, obj0, slot);
+
+  // Build containers down to the parent of the leaf
+  int containers[33];
+  containers[0] = obj0;
+  for (int i = 0; i < depth - 1; ++i) {
+    int tmp = generate_temp(fn);
+    EMIT_MEMBER_LOAD(&fn->code, tmp, containers[i], path[i]);
+    containers[i + 1] = tmp;
+  }
+
+  // Write the rhs into the leaf field
+  EMIT_MEMBER_STORE(&fn->code,
+                    containers[depth - 1], // parent container
+                    path[depth - 1],       // leaf index
+                    rhs);
+
+  // Write back up the chain
+  for (int i = depth - 2; i >= 0; --i) {
+    EMIT_MEMBER_STORE(&fn->code, containers[i], path[i], containers[i + 1]);
+  }
+
+  // Store updated top-level struct back to the variable slot
+  EMIT_STORE(&fn->code, slot, containers[0]);
+
+  return rhs; // assignment expression result
+}
+
 int lower_lvalue_slot(Thir *n) {
   switch (n->tag) {
   case THIR_VARIABLE:
     return (int)n->binding->index;
-    return true;
   default:
     char *msg;
     asprintf(&msg, "lower_lvalue: unsupported lvalue tag %d at %s", n->tag,
@@ -72,6 +157,9 @@ int lower_lvalue_slot(Thir *n) {
 int lower_expression(Thir *n, Function *fn, Module *m) {
   assert(n && "null expression while lowering");
   switch (n->tag) {
+  case THIR_MEMBER_ACCESS: {
+    return lower_member_rvalue(n, fn, m);
+  }
   case THIR_AGGREGATE_INITIALIZER: {
     int dest = generate_temp(fn);
     EMIT_ALLOCA(&fn->code, dest, n->type->index);
@@ -95,8 +183,11 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
   }
   case THIR_BINARY: {
     if (n->binary.op == TOKEN_ASSIGN) {
-      int l = lower_lvalue_slot(n->binary.left);
       int r = lower_expression(n->binary.right, fn, m);
+      if (n->binary.left->tag == THIR_MEMBER_ACCESS) {
+        return lower_member_assignment(n->binary.left, r, fn);
+      }
+      int l = lower_lvalue_slot(n->binary.left);
       EMIT_STORE(&fn->code, l, r);
       return l;
     }

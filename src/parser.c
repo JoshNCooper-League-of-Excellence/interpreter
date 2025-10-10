@@ -257,10 +257,8 @@ Ast *parse_identifier(Lexer *lexer, Context *context) {
     return parse_variable(lexer, context);
   } else if (two_ahead.type == TOKEN_COLON) {
     return parse_function(lexer, context);
-  } else if (one_ahead.type == TOKEN_LPAREN) {
+  } else if (one_ahead.type == TOKEN_LPAREN || one_ahead.type == TOKEN_ASSIGN || one_ahead.type == TOKEN_DOT) {
     return parse_expression(lexer, context); // Function call
-  } else if (one_ahead.type == TOKEN_ASSIGN) {
-    return parse_expression(lexer, context);
   } else {
     return parser_error(context, lexer_span(lexer),
                         "invalid identifier statement. expected variable or "

@@ -121,7 +121,7 @@ void vm_execute(Module *m) {
       int dest = sf->ret_dest;
       sp = caller_idx;
       if (dest >= 0) {
-        call_stack[sp].locals[dest] = rv;
+        sf->locals[dest] = rv;
       }
       continue;
     }
@@ -131,17 +131,17 @@ void vm_execute(Module *m) {
     switch (instr.op) {
     case OP_ALLOCA: {
       int dest = instr.a;
-      int idx = instr.b;
-      if (idx < 0 || (unsigned)idx >= m->types.length) {
-        VM_ERRF("invalid type index %d", idx);
+      int ty_idx = instr.b;
+      if (ty_idx < 0 || (unsigned)ty_idx >= m->types.length) {
+        VM_ERRF("invalid type index %d", ty_idx);
       }
-      call_stack[sp].locals[dest] = default_value_of_type(m->types.data[idx]);
+      sf->locals[dest] = default_value_of_type(m->types.data[ty_idx]);
     } break;
     case OP_MEMBER_LOAD: {
       int dest = instr.a;
       int struct_slot = instr.b;
       int member_idx = instr.c;
-      Value *struct_val = &call_stack[sp].locals[struct_slot];
+      Value *struct_val = &sf->locals[struct_slot];
       if (struct_val->type != VALUE_STRUCT) {
         VM_ERRF("OP_MEMBER_LOAD: value at slot %d is not a struct",
                 struct_slot);
@@ -149,13 +149,14 @@ void vm_execute(Module *m) {
       if (member_idx < 0 || (size_t)member_idx >= struct_val->$struct.length) {
         VM_ERRF("OP_MEMBER_LOAD: invalid member index %d", member_idx);
       }
-      call_stack[sp].locals[dest] = struct_val->$struct.members[member_idx];
+      Value value = struct_val->$struct.members[member_idx];
+      sf->locals[dest] = value;
     } break;
     case OP_MEMBER_STORE: {
       int struct_slot = instr.a;
       int member_idx = instr.b;
       int src = instr.c;
-      Value *struct_val = &call_stack[sp].locals[struct_slot];
+      Value *struct_val = &sf->locals[struct_slot];
       if (struct_val->type != VALUE_STRUCT) {
         VM_ERRF("OP_MEMBER_STORE: value at slot %d is not a struct",
                 struct_slot);
@@ -163,17 +164,17 @@ void vm_execute(Module *m) {
       if (member_idx < 0 || (size_t)member_idx >= struct_val->$struct.length) {
         VM_ERRF("OP_MEMBER_STORE: invalid member index %d", member_idx);
       }
-      struct_val->$struct.members[member_idx] = call_stack[sp].locals[src];
+      struct_val->$struct.members[member_idx] = sf->locals[src];
     } break;
     case OP_CONST: {
       int dest = instr.a;
       int cidx = instr.b;
-      call_stack[sp].locals[dest] = constants[cidx];
+      sf->locals[dest] = constants[cidx];
     } break;
     case OP_LOAD: {
       int dest = instr.a;
       int slot = instr.b;
-      call_stack[sp].locals[dest] = call_stack[sp].locals[slot];
+      sf->locals[dest] = call_stack[sp].locals[slot];
     } break;
     case OP_STORE: {
       int slot = instr.a;

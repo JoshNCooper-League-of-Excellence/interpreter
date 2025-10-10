@@ -309,10 +309,9 @@ Thir *type_expression(Ast *ast, Context *context) {
   switch (ast->tag) {
   case AST_MEMBER_ACCESS: {
     Thir *base = type_expression(ast->member_access.base, context);
+
     Thir *thir = thir_alloc(context, THIR_MEMBER_ACCESS, ast->span);
     thir->member_access.base = base;
-    thir->member_access.member = ast->member_access.member;
-
     Type *base_type = base->type;
 
     if (base_type->tag != TYPE_STRUCT) {
@@ -324,23 +323,24 @@ Thir *type_expression(Ast *ast, Context *context) {
     }
 
     Struct_Type *struct_type = (Struct_Type *)base_type;
-    bool found = false;
-
+    unsigned index = -1;
     LIST_FOREACH(struct_type->members, member) {
-      if (strcmp(member.name, thir->member_access.member) == 0) {
+      if (strcmp(member.name, ast->member_access.member) == 0) {
         thir->type = member.type;
-        found = true;
+        index = __i;
         break;
       }
     }
 
-    if (!found) {
+    if (index < 0) {
       char *buf;
       asprintf(&buf, "error: member '%s' not found in struct at: %s",
-               thir->member_access.member, lexer_span_to_string(ast->span));
+               ast->member_access.member, lexer_span_to_string(ast->span));
       fprintf(stderr, "%s\n", buf);
       exit(1);
     }
+
+    thir->member_access.index = index;
 
     return thir;
   } break;

@@ -55,7 +55,7 @@ typedef struct Thir {
 
     struct {
       struct Thir *base;
-      const char *member;
+      unsigned index;
     } member_access;
 
     struct {
@@ -142,9 +142,8 @@ static inline void print_ir_rec(Thir *node, String_Builder *sb, int indent) {
     sb_append(sb, "base:\n");
     print_ir_rec(node->member_access.base, sb, indent + 2);
     print_indent_ir(sb, indent + 1);
-    sb_append(sb, "member: ");
-    sb_append(sb, node->member_access.member);
-    sb_append(sb, "\n");
+    sb_append(sb, "member_idx: ");
+    sb_appendf(sb, "%d\n", node->member_access.index);
     break;
   case THIR_AGGREGATE_INITIALIZER:
     print_indent_ir(sb, indent + 1);

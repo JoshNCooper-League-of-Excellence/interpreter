@@ -288,7 +288,7 @@ static inline Token lexer_gettok(Lexer *lexer) {
         return (Token){nullptr, false, TOKEN_ASSIGN,
                        .span = {begin_line, begin_col, 1, start}};
       case '.':
-        return (Token){nullptr, false, TOKEN_ASSIGN,
+        return (Token){nullptr, false, TOKEN_DOT,
                        .span = {begin_line, begin_col, 1, start}};
       case ':':
         return (Token){nullptr, false, TOKEN_COLON,
