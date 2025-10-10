@@ -26,8 +26,9 @@ typedef enum {
 } Ast_Tag;
 
 typedef struct {
-  const char *identifier;
-  const char *type;
+  const char *name;
+  struct Ast *type;
+  bool nameless;
 } Parameter;
 
 DEFINE_LIST(Parameter);
@@ -213,9 +214,11 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
     for (size_t i = 0; i < node->extern_function.parameters.length; ++i) {
       Parameter *param = &node->extern_function.parameters.data[i];
       print_indent(sb, indent + 2);
-      sb_append(sb, param->type);
-      sb_append(sb, " ");
-      sb_append(sb, param->identifier);
+      sb_append(sb, param->type->type.path);
+      if (!param->nameless) {
+        sb_append(sb, " ");
+        sb_append(sb, param->name);
+      }
       sb_append(sb, "\n");
     }
     break;
@@ -259,9 +262,11 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
     for (size_t i = 0; i < node->function.parameters.length; ++i) {
       Parameter *param = &node->function.parameters.data[i];
       print_indent(sb, indent + 2);
-      sb_append(sb, param->type);
-      sb_append(sb, " ");
-      sb_append(sb, param->identifier);
+      sb_append(sb, param->type->type.path);
+      if (!param->nameless) {
+        sb_append(sb, " ");
+        sb_append(sb, param->name);
+      }
       sb_append(sb, "\n");
     }
     print_indent(sb, indent + 1);

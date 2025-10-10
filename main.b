@@ -1,5 +1,7 @@
-extern printf :: (msg string, v int, v int) int;
 
+// extern printf :: (msg string, v int, v int) int;
+
+extern printf :: (string, int, int) int;
 
 struct Vec3 { 
   x int,  
@@ -9,8 +11,6 @@ struct Vec3 {
 
 main :: (args string) int {
   Vec3 vec3 = { 0, 0, 0 }; 
-
-  printf("vec3.x = %d\n", vec3.x);
 
   int x = {100 * 2};
   int y = x + 100;

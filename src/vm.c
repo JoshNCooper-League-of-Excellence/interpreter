@@ -99,9 +99,6 @@ void vm_execute(Module *m) {
     }
   }
 
-  // execution context.
-  Function *f = m->entry_point;
-
   Stack_Frame call_stack[256];
   int sp = 0;
 
@@ -344,7 +341,7 @@ Value default_value_of_type(Type *type) {
 
 void value_free(Value *value) {
   if (value->type == VALUE_STRUCT) {
-    for (int i = 0; i < value->$struct.length; ++i) {
+    for (unsigned i = 0; i < value->$struct.length; ++i) {
       value_free(&value->$struct.members[i]);
     }
     free(value->$struct.members);

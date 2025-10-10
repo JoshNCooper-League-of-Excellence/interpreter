@@ -8,7 +8,7 @@
 void print_ast_function_header(Ast *function) {
   printf("%s :: (", function->function.name);
   LIST_FOREACH(function->function.parameters, param) {
-    printf("%s %s", param.identifier, param.type);
+    printf("%s %s", param.name, param.type->type.path);
     if (__i != function->function.parameters.length - 1) {
       printf(", ");
     }
@@ -293,14 +293,24 @@ bool parse_function_header(Lexer *lexer, Context *context, const char **name,
   *parameters = (Parameter_list){0};
   while (true) {
     Token peeked = lexer_peek(lexer);
-    if (peeked.type == TOKEN_EOF || peeked.type == TOKEN_RPAREN) {
+    if (peeked.type == TOKEN_RPAREN) {
       break;
     }
 
-    Token param_name = EXPECT(TOKEN_IDENTIFIER);
-    Token param_type = EXPECT(TOKEN_IDENTIFIER);
-    Parameter parameter = {param_name.value, param_type.value};
-    LIST_PUSH(*parameters, parameter);
+    Token one_ahead = lexer_lookahead(lexer, 1);
+    // Parse a type, no name for parameter.
+    if (lexer_next(lexer) != TOKEN_IDENTIFIER ||
+        one_ahead.type == TOKEN_COMMA || one_ahead.type == TOKEN_RPAREN) {
+      Parameter parameter = {.type = OK(parse_type(lexer, context)),
+                             .nameless = true};
+      LIST_PTR_PUSH(parameters, parameter);
+    } else { // Parse $name $Type pair.
+      Token param_name = EXPECT(TOKEN_IDENTIFIER);
+      Parameter parameter = {.name = param_name.value,
+                             .type = OK(parse_type(lexer, context)),
+                             .nameless = false};
+      LIST_PTR_PUSH(parameters, parameter);
+    }
 
     if (lexer_next(lexer) != TOKEN_RPAREN) {
       EXPECT(TOKEN_COMMA);

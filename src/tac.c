@@ -320,7 +320,7 @@ void print_module(Module *m, String_Builder *sb) {
   sb_append(sb, "FUNCTIONS:\n");
   LIST_FOREACH(m->functions, function) {
     sb_appendf(sb, "  %s:\n", function->name);
-    for (int i = 0; i < function->code.length; ++i) {
+    for (unsigned i = 0; i < function->code.length; ++i) {
       sb_append(sb, "\t");
       print_instr(&function->code.data[i], sb);
       sb_append(sb, "\n");

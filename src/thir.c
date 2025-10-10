@@ -37,17 +37,11 @@ Binding_Ptr_list typer_convert_parameters(Context *context,
   Binding_Ptr_list bindings = {0};
   LIST_FOREACH(parameters, param) {
     Thir_Ptr thir_param = thir_alloc(context, THIR_VARIABLE, span);
-    Type *param_type;
-
-    if (!try_find_type(context, param.type, &param_type)) {
-      fprintf(stderr, "unable to find type: '%s' at: %s\n", param.type,
-              lexer_span_to_string(span));
-      exit(1);
-    }
+    Type *param_type = get_type_from_ast_type(param.type, context);
 
     Binding binding = {.thir = thir_param,
                        .ast = nullptr,
-                       .name = param.identifier,
+                       .name = param.name,
                        .type = param_type};
 
     Binding_Ptr ptr = bind_variable(context, binding);
@@ -329,9 +323,9 @@ Thir *type_expression(Ast *ast, Context *context) {
       exit(1);
     }
 
-    Struct_Type *struct_type = (Struct_Type*)base_type;
+    Struct_Type *struct_type = (Struct_Type *)base_type;
     bool found = false;
-    
+
     LIST_FOREACH(struct_type->members, member) {
       if (strcmp(member.name, thir->member_access.member) == 0) {
         thir->type = member.type;
@@ -435,7 +429,7 @@ Thir *type_call(Ast *ast, Context *context) {
 
   Thir *function = callee->thir;
 
-  int n_params = function->function.parameters.length;
+  unsigned n_params = function->function.parameters.length;
   if (n_params != arguments.length) {
     char *buf;
     asprintf(&buf,
