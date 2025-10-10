@@ -3,6 +3,8 @@
 
 extern printf :: (string, int, int) int;
 
+
+
 struct Vec3 { 
   x int,  
   y int, 

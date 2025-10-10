@@ -334,6 +334,13 @@ Ast *parse_function(Lexer *lexer, Context *context) {
     return NULL;
   }
 
+
+  LIST_FOREACH(parameters, param) {
+    if (param.nameless) {
+      return parser_error(context, span, "You cannot use nameless parameters in a function that is not extern", true);
+    }
+  }
+
   Ast *block = OK(parse_block(lexer, context));
   END_SPAN();
 
