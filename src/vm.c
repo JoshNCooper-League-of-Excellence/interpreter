@@ -148,6 +148,7 @@ void vm_execute(Module *m) {
       }
       continue;
     }
+
     case OP_MEMBER_LOAD_INDIRECT: {
       integer dest = instr.a;
       integer src = instr.b;
@@ -168,6 +169,7 @@ void vm_execute(Module *m) {
 
       continue;
     }
+
     case OP_MEMBER_LOAD: {
       integer dest = instr.a;
       integer src = instr.b;
@@ -204,6 +206,25 @@ void vm_execute(Module *m) {
       continue;
     }
 
+    case OP_MEMBER_STORE_INDIRECT: {
+      integer temp = instr.a;
+      integer ptr = instr.b;
+      integer src = instr.c;
+      Value *val = &sf->locals[temp];
+      integer index = sf->locals[ptr].integer;
+
+      if (val->tag == VALUE_STRUCT) {
+        val->$struct.members[index] = sf->locals[src];
+      } else if (val->tag == VALUE_POINTER) {
+        if (val->pointer.pointee == POINTEE_VALUE) {
+          ((Value *)val->pointer.elements)[index] = sf->locals[src];
+        } else {
+          VM_ERRF("OP_MEMBER_STORE not supported for unmanged pointers or arrays yet");
+        }
+      }
+      continue;
+    }
+    
     case OP_CONST: {
       integer dest = instr.a;
       integer cidx = instr.b;

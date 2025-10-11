@@ -15,10 +15,13 @@ main :: () void {
   a int[] = {0, 100, 2};
   printf("a[1] = %d\n", a[1]);
 
+  a[0] = 10;
+  printf("a[0] = %d\n", a[0]);
+
   x int = 0;
   s string = str("Hello, World!");
   
-  puts(s.data);
+  // puts(s.data);
 
   p void* = malloc(1000);
 

@@ -16,84 +16,98 @@ CONSTANTS:
   [2]: { type: int, value: 2 }
   [3]: { type: byte*, value: "a[1] = %d\n\0" }
   [4]: { type: int, value: 1 }
-  [5]: { type: byte*, value: "Hello, World!\0" }
-  [6]: { type: int, value: 1000 }
-  [7]: { type: int, value: 3 }
-  [8]: { type: int, value: 4 }
-  [9]: { type: byte*, value: "%p\n\0" }
-  [10]: { type: byte*, value: "Hello, World\0" }
-  [11]: { type: int, value: 12 }
+  [5]: { type: int, value: 10 }
+  [6]: { type: byte*, value: "a[0] = %d\n\0" }
+  [7]: { type: byte*, value: "Hello, World!\0" }
+  [8]: { type: int, value: 1000 }
+  [9]: { type: int, value: 3 }
+  [10]: { type: int, value: 4 }
+  [11]: { type: byte*, value: "%p\n\0" }
+  [12]: { type: byte*, value: "Hello, World\0" }
+  [13]: { type: int, value: 12 }
 FUNCTIONS:
   str:
-    ALLOCA t1, 13, 0
-    LOAD t2, 0
+    t1 = ALLOCA 13, 0
+    t2 = LOAD 0
     MEMBER_STORE t1, 0, t2
-    LOAD t3, 0
+    t3 = LOAD 0
     PUSH t3
-    CALL_EXTERN t4, 2, 1
+    t4 = CALL_EXTERN 2, 1
     MEMBER_STORE t1, 1, t4
     RET t1
   main:
-    ALLOCA t1, 1, 3
-    CONST t2, c0
+    t1 = ALLOCA 1, 3
+    t2 = CONST c0
     MEMBER_STORE t1, 0, t2
-    CONST t3, c1
+    t3 = CONST c1
     MEMBER_STORE t1, 1, t3
-    CONST t4, c2
+    t4 = CONST c2
     MEMBER_STORE t1, 2, t4
     STORE 0, t1
-    CONST t5, c3
+    t5 = CONST c3
     PUSH t5
-    LOAD t6, 0
-    CONST t7, c4
-    UNKNOWN 13
+    t6 = LOAD 0
+    t7 = CONST c4
+    t8 = MEMBER_LOAD_INDIRECT t6, t7
     PUSH t8
-    CALL_EXTERN t9, 1, 2
-    CONST t11, c0
-    STORE 10, t11
-    CONST t13, c5
+    t9 = CALL_EXTERN 1, 2
+    t10 = CONST c5
+    t11 = LOAD 0
+    t12 = CONST c0
+    MEMBER_STORE_INDIRECT t11, t12, t10
+    STORE 0, t11
+    t13 = CONST c6
     PUSH t13
-    CALL t14, 0, 1
-    STORE 12, t14
-    CONST t16, c6
+    t14 = LOAD 0
+    t15 = CONST c0
+    t16 = MEMBER_LOAD_INDIRECT t14, t15
     PUSH t16
-    CALL_EXTERN t17, 3, 1
-    STORE 15, t17
-    ALLOCA t19, 1, 5
-    CONST t20, c0
-    MEMBER_STORE t19, 0, t20
-    CONST t21, c4
-    MEMBER_STORE t19, 1, t21
-    CONST t22, c2
-    MEMBER_STORE t19, 2, t22
-    CONST t23, c7
-    MEMBER_STORE t19, 3, t23
-    CONST t24, c8
-    MEMBER_STORE t19, 4, t24
+    t17 = CALL_EXTERN 1, 2
+    t19 = CONST c0
     STORE 18, t19
-    CONST t25, c9
-    PUSH t25
-    LOAD t26, 15
-    PUSH t26
-    CALL_EXTERN t27, 1, 2
-    LOAD t28, 15
-    PUSH t28
-    CONST t29, c10
-    PUSH t29
-    CONST t30, c1
-    PUSH t30
-    CALL_EXTERN t31, 5, 3
-    LOAD t32, 12
-    MEMBER_LOAD t33, t32, 1
-    CONST t34, c11
-    GREATER t35, t33, t34
-    JUMP_IF t35, 1
-    JUMP 4
-    LOAD t36, 12
-    MEMBER_LOAD t37, t36, 0
+    t21 = CONST c7
+    PUSH t21
+    t22 = CALL 0, 1
+    STORE 20, t22
+    t24 = CONST c8
+    PUSH t24
+    t25 = CALL_EXTERN 3, 1
+    STORE 23, t25
+    t27 = ALLOCA 1, 5
+    t28 = CONST c0
+    MEMBER_STORE t27, 0, t28
+    t29 = CONST c4
+    MEMBER_STORE t27, 1, t29
+    t30 = CONST c2
+    MEMBER_STORE t27, 2, t30
+    t31 = CONST c9
+    MEMBER_STORE t27, 3, t31
+    t32 = CONST c10
+    MEMBER_STORE t27, 4, t32
+    STORE 26, t27
+    t33 = CONST c11
+    PUSH t33
+    t34 = LOAD 23
+    PUSH t34
+    t35 = CALL_EXTERN 1, 2
+    t36 = LOAD 23
+    PUSH t36
+    t37 = CONST c12
     PUSH t37
-    CALL_EXTERN t38, 0, 1
-    LOAD t39, 15
-    PUSH t39
-    CALL_EXTERN t40, 4, 1
+    t38 = CONST c1
+    PUSH t38
+    t39 = CALL_EXTERN 5, 3
+    t40 = LOAD 20
+    t41 = MEMBER_LOAD t40, 1
+    t42 = CONST c13
+    t43 = GREATER t41, t42
+    JUMP_IF t43, 1
+    JUMP 4
+    t44 = LOAD 20
+    t45 = MEMBER_LOAD t44, 0
+    PUSH t45
+    t46 = CALL_EXTERN 0, 1
+    t47 = LOAD 23
+    PUSH t47
+    t48 = CALL_EXTERN 4, 1
     RET t0

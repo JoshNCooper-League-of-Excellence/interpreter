@@ -157,6 +157,41 @@ int lower_member_rvalue(Thir *n, Function *fn, Module *m) {
   return obj;
 }
 
+// n is a binary INDEX node
+static int lower_index_rvalue(Thir *n, Function *fn, Module *m) {
+  Thir *base = n->binary.left;
+
+  int obj;
+  if (base->tag == THIR_VARIABLE) {
+    obj = generate_temp(fn);
+    EMIT_LOAD(fn->code, obj, (int)base->binding->index);
+  } else {
+    obj = lower_expression(base, fn, m);
+  }
+
+  int idx = lower_expression(n->binary.right, fn, m);
+  int out = generate_temp(fn);
+  EMIT_MEMBER_LOAD_INDIRECT(fn->code, out, obj, idx);
+  return out;
+}
+
+// arr[i] = rhs (root must be a variable)
+static int lower_index_assignment(Thir *lhs, int rhs, Function *fn, Module *m) {
+  Thir *base = lhs->binary.left;
+  assert(base->tag == THIR_VARIABLE && "assignment to non-lvalue index base");
+
+  int slot = (int)base->binding->index;
+
+  int obj = generate_temp(fn);
+  EMIT_LOAD(fn->code, obj, slot);
+
+  int idx = lower_expression(lhs->binary.right, fn, m);
+  EMIT_MEMBER_STORE_INDIRECT(fn->code, obj, idx, rhs);
+
+  EMIT_STORE(fn->code, slot, obj);
+  return rhs;
+}
+
 int lower_member_assignment(Thir *lhs, int rhs, Function *fn) {
   int leaf_to_root[32];
   Thir *base = NULL;
@@ -207,6 +242,11 @@ int lower_get_lvalue(Thir *lhs, Function *fn, Module *m) {
   switch (lhs->tag) {
   case THIR_MEMBER_ACCESS:
     return lower_member_rvalue(lhs, fn, m);
+  case THIR_BINARY:
+    if (lhs->binary.op == OPERATOR_INDEX) {
+      return lower_index_rvalue(lhs, fn, m);
+    }
+    break;
   case THIR_VARIABLE: {
     int tmp = generate_temp(fn);
     EMIT_LOAD(fn->code, tmp, (int)lhs->binding->index);
@@ -217,13 +257,20 @@ int lower_get_lvalue(Thir *lhs, Function *fn, Module *m) {
     exit(EXIT_FAILURE);
   }
   }
+  return -1;
 }
 
-void lower_set_lvalue(Thir *lhs, int value, Function *fn) {
+void lower_set_lvalue(Thir *lhs, int value, Function *fn, Module *m) {
   switch (lhs->tag) {
   case THIR_MEMBER_ACCESS:
     (void)lower_member_assignment(lhs, value, fn);
     return;
+  case THIR_BINARY:
+    if (lhs->binary.op == OPERATOR_INDEX) {
+      (void)lower_index_assignment(lhs, value, fn, m);
+      return;
+    }
+    break;
   case THIR_VARIABLE:
     EMIT_STORE(fn->code, (int)lhs->binding->index, value);
     return;
@@ -233,6 +280,7 @@ void lower_set_lvalue(Thir *lhs, int value, Function *fn) {
   }
   }
 }
+
 
 int lower_lvalue_slot(Thir *n) {
   switch (n->tag) {
@@ -287,7 +335,7 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
   case THIR_BINARY: {
     if (n->binary.op == OPERATOR_ASSIGN) {
       int rhs = lower_expression(n->binary.right, fn, m);
-      lower_set_lvalue(n->binary.left, rhs, fn);
+      lower_set_lvalue(n->binary.left, rhs, fn, m);
       return rhs;
     }
 
@@ -326,7 +374,7 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
         exit(1);
       }
 
-      lower_set_lvalue(n->binary.left, res, fn);
+      lower_set_lvalue(n->binary.left, res, fn, m);
       return res;
     }
 
@@ -395,7 +443,7 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
     case OPERATOR_SHIFT_RIGHT:
       EMIT_SHIFT_RIGHT(fn->code, dest, l, r);
       break;
-    case OPERATOR_INDEX: 
+    case OPERATOR_INDEX:
       EMIT_MEMBER_LOAD_INDIRECT(fn->code, dest, l, r);
       break;
     default:
@@ -575,116 +623,107 @@ void print_instr(Instr *i, String_Builder *sb, int indent) {
     sb_append(sb, "  ");
   switch (i->op) {
   case OP_ALLOCA:
-    // ALLOCA t<dest>, <typeIndex> <length>
-    sb_appendf(sb, "ALLOCA t%d, %d, %d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = ALLOCA %d, %d", i->a, i->b, i->c);
     break;
   case OP_CONST:
-    // CONST t<dest>, c<constIndex>
-    sb_appendf(sb, "CONST t%d, c%d", i->a, i->b);
+    sb_appendf(sb, "t%d = CONST c%d", i->a, i->b);
     break;
   case OP_LOAD:
-    // LOAD t<dest>, <slot>
-    sb_appendf(sb, "LOAD t%d, %d", i->a, i->b);
-    break;
-  case OP_STORE:
-    // STORE <slot>, t<src>
-    sb_appendf(sb, "STORE %d, t%d", i->a, i->b);
+    sb_appendf(sb, "t%d = LOAD %d", i->a, i->b);
     break;
   case OP_MEMBER_LOAD:
-    // MEMBER_LOAD t<dest>, t<obj>, <memberIndex>
-    sb_appendf(sb, "MEMBER_LOAD t%d, t%d, %d", i->a, i->b, i->c);
-    break;
-  case OP_MEMBER_STORE:
-    // MEMBER_STORE t<obj>, <memberIndex>, t<src>
-    sb_appendf(sb, "MEMBER_STORE t%d, %d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = MEMBER_LOAD t%d, %d", i->a, i->b, i->c);
     break;
   case OP_ADD:
-    sb_appendf(sb, "ADD t%d, t%d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = ADD t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_SUB:
-    sb_appendf(sb, "SUB t%d, t%d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = SUB t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_MUL:
-    sb_appendf(sb, "MUL t%d, t%d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = MUL t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_DIV:
-    sb_appendf(sb, "DIV t%d, t%d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = DIV t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_MODULO:
-    sb_appendf(sb, "MODULO t%d, t%d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = MODULO t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_SHIFT_LEFT:
-    sb_appendf(sb, "SHIFT_LEFT t%d, t%d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = SHIFT_LEFT t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_SHIFT_RIGHT:
-    sb_appendf(sb, "SHIFT_RIGHT t%d, t%d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = SHIFT_RIGHT t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_BIT_AND:
-    sb_appendf(sb, "BIT_AND t%d, t%d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = BIT_AND t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_BIT_OR:
-    sb_appendf(sb, "BIT_OR t%d, t%d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = BIT_OR t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_XOR:
-    sb_appendf(sb, "XOR t%d, t%d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = XOR t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_EQUALS:
-    sb_appendf(sb, "EQUALS t%d, t%d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = EQUALS t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_NOT_EQUALS:
-    sb_appendf(sb, "NOT_EQUALS t%d, t%d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = NOT_EQUALS t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_LESS:
-    sb_appendf(sb, "LESS t%d, t%d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = LESS t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_GREATER:
-    sb_appendf(sb, "GREATER t%d, t%d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = GREATER t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_LOGICAL_OR:
-    sb_appendf(sb, "LOGICAL_OR t%d, t%d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = LOGICAL_OR t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_LOGICAL_AND:
-    sb_appendf(sb, "LOGICAL_AND t%d, t%d, t%d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = LOGICAL_AND t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_NEGATE:
-    // unary: NEGATE t<dest> t<src>
-    sb_appendf(sb, "NEGATE t%d, t%d", i->a, i->b);
+    sb_appendf(sb, "t%d = NEGATE t%d", i->a, i->b);
     break;
   case OP_LOGICAL_NOT:
-    sb_appendf(sb, "LOGICAL_NOT t%d, t%d", i->a, i->b);
+    sb_appendf(sb, "t%d = LOGICAL_NOT t%d", i->a, i->b);
     break;
   case OP_BIT_NOT:
-    sb_appendf(sb, "BIT_NOT t%d, t%d", i->a, i->b);
-    break;
-  case OP_PUSH:
-    // PUSH t<src>
-    sb_appendf(sb, "PUSH t%d", i->a);
+    sb_appendf(sb, "t%d = BIT_NOT t%d", i->a, i->b);
     break;
   case OP_CALL:
-    // CALL t<dest>, <funcIndex>, <nargs>
-    sb_appendf(sb, "CALL t%d, %d, %d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = CALL %d, %d", i->a, i->b, i->c);
     break;
   case OP_CALL_EXTERN:
-    // CALL_EXTERN t<dest>, <externIndex>, <nargs>
-    sb_appendf(sb, "CALL_EXTERN t%d, %d, %d", i->a, i->b, i->c);
+    sb_appendf(sb, "t%d = CALL_EXTERN %d, %d", i->a, i->b, i->c);
+    break;
+  // Instructions without dest:
+  case OP_STORE:
+    sb_appendf(sb, "STORE %d, t%d", i->a, i->b);
+    break;
+  case OP_MEMBER_STORE:
+    sb_appendf(sb, "MEMBER_STORE t%d, %d, t%d", i->a, i->b, i->c);
+    break;
+  case OP_PUSH:
+    sb_appendf(sb, "PUSH t%d", i->a);
     break;
   case OP_RET:
-    // RET t<src> | RET -1
     if (i->a >= 0)
       sb_appendf(sb, "RET t%d", i->a);
     else
       sb_append(sb, "RET -1");
     break;
   case OP_JUMP:
-    // JUMP <offset>
     sb_appendf(sb, "JUMP %d", i->a);
     break;
   case OP_JUMP_IF:
-    // JUMP_IF t<cond>, <offset>
     sb_appendf(sb, "JUMP_IF t%d, %d", i->a, i->b);
     break;
-  default:
-    sb_appendf(sb, "UNKNOWN %d", i->op);
+  case OP_MEMBER_LOAD_INDIRECT:
+    sb_appendf(sb, "t%d = MEMBER_LOAD_INDIRECT t%d, t%d", i->a, i->b, i->c);
+    break;
+  case OP_MEMBER_STORE_INDIRECT:
+    sb_appendf(sb, "MEMBER_STORE_INDIRECT t%d, t%d, t%d", i->a, i->b, i->c);
     break;
   }
 }

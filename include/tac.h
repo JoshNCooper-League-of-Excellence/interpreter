@@ -23,6 +23,7 @@ typedef enum {
   OP_MEMBER_LOAD,
   OP_MEMBER_LOAD_INDIRECT,
   OP_MEMBER_STORE,
+  OP_MEMBER_STORE_INDIRECT,
   OP_NEGATE,
   OP_LOGICAL_OR,
   OP_LOGICAL_AND,
@@ -134,9 +135,13 @@ void module_init(Module *m, Context *context);
 
 #define EMIT_MEMBER_LOAD(buf, dest, target, index) EMIT(buf, MAKE_INSTR3(OP_MEMBER_LOAD, (dest), (target), (index)))
 
-#define EMIT_MEMBER_LOAD_INDIRECT(buf, dest, target, ptr) EMIT(buf, MAKE_INSTR3(OP_MEMBER_LOAD_INDIRECT, (dest), (target), (ptr)))
+#define EMIT_MEMBER_LOAD_INDIRECT(buf, dest, target, ptr)                                                                   \
+  EMIT(buf, MAKE_INSTR3(OP_MEMBER_LOAD_INDIRECT, (dest), (target), (ptr)))
 
 #define EMIT_MEMBER_STORE(buf, target, index, src) EMIT(buf, MAKE_INSTR3(OP_MEMBER_STORE, (target), (index), (src)))
+
+#define EMIT_MEMBER_STORE_INDIRECT(buf, dest, target, ptr)                                                                  \
+  EMIT(buf, MAKE_INSTR3(OP_MEMBER_STORE_INDIRECT, (dest), (target), (ptr)))
 
 #define EMIT_ALLOCA(buf, dest, type_index, length) EMIT(buf, MAKE_INSTR3(OP_ALLOCA, (dest), (type_index), (length)))
 
