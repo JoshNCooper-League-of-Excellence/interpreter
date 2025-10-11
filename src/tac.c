@@ -648,6 +648,7 @@ void lower_program(Thir *program, Module *m) {
     }
   }
 }
+
 static void append_local_type(Function *fn, Module *m, String_Builder *sb, unsigned temp, unsigned array_length) {
   int ty = fn->local_types.data[temp];
   print_type_with_length(m->types.data[ty], sb, array_length);

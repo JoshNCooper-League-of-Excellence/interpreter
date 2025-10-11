@@ -4,8 +4,7 @@
 #include "type.h"
 
 Ast *ast_alloc(Context *context, int tag, Span span) {
-  struct Ast *ast = malloc(sizeof(struct Ast));
-  memset(ast, 0, sizeof(Ast));
+  struct Ast *ast = arena_alloc(&context->ast_arena, sizeof(struct Ast));
   ast->index = context->ast_list.length;
   ast->span = span;
   ast->tag = tag;
@@ -14,8 +13,7 @@ Ast *ast_alloc(Context *context, int tag, Span span) {
 }
 
 Thir *thir_alloc(Context *context, int tag, Span span) {
-  Thir *thir = malloc(sizeof(Thir));
-  memset(thir, 0, sizeof(Ast));
+  Thir *thir = arena_alloc(&context->thir_arena, (sizeof(Thir)));
   thir->index = context->thir_list.length;
   thir->span = span;
   thir->tag = tag;
@@ -24,8 +22,7 @@ Thir *thir_alloc(Context *context, int tag, Span span) {
 }
 
 Binding_Ptr bind_variable(Context *context, Binding binding) {
-  Binding_Ptr ptr = malloc(sizeof(Binding));
-  memset(ptr, 0, sizeof(Binding));
+  Binding_Ptr ptr = arena_alloc(&context->binding_arena, sizeof(Binding));
   memcpy(ptr, &binding, sizeof(Binding));
 
   ptr->index = context->variables;
@@ -41,9 +38,9 @@ Binding_Ptr bind_variable(Context *context, Binding binding) {
   LIST_PUSH(context->bindings, ptr);
   return ptr;
 }
+
 Binding_Ptr bind_function(Context *context, Binding binding, bool is_extern) {
-  Binding_Ptr ptr = malloc(sizeof(Binding));
-  memset(ptr, 0, sizeof(Binding));
+  Binding_Ptr ptr = arena_alloc(&context->binding_arena, sizeof(Binding));
   memcpy(ptr, &binding, sizeof(Binding));
 
   if (!is_extern) { // extern functions have no associations
@@ -63,16 +60,14 @@ Binding_Ptr bind_function(Context *context, Binding binding, bool is_extern) {
 }
 
 Type *type_alloc(Context *context) {
-  Type *type = malloc(sizeof(Type));
-  memset(type, 0, sizeof(Type));
+  Type *type = arena_alloc(&context->type_arena, sizeof(Type));
   type->index = context->type_table.length;
   LIST_PUSH(context->type_table, type);
   return type;
 }
 
 Function_Type *function_type_alloc(Context *context) {
-  Function_Type *type = malloc(sizeof(Function_Type));
-  memset(type, 0, sizeof(Function_Type));
+  Function_Type *type = arena_alloc(&context->function_type_arena, sizeof(Function_Type));
   type->base.index = context->type_table.length;
   type->base.tag = TYPE_FUNCTION;
   LIST_PUSH(context->type_table, (Type *)type);
@@ -80,8 +75,7 @@ Function_Type *function_type_alloc(Context *context) {
 }
 
 Struct_Type *struct_type_alloc(Context *context, const char *name) {
-  Struct_Type *type = malloc(sizeof(Struct_Type));
-  memset(type, 0, sizeof(Struct_Type));
+  Struct_Type *type = arena_alloc(&context->struct_type_arena, sizeof(Struct_Type));
   type->base.index = context->type_table.length;
   type->base.tag = TYPE_STRUCT;
   type->base.name = name;
@@ -90,6 +84,13 @@ Struct_Type *struct_type_alloc(Context *context, const char *name) {
 }
 
 void context_initialize(Context *context) {
+  arena_init(&context->function_type_arena, 1024 * 1024);
+  arena_init(&context->struct_type_arena, 1024 * 1024);
+  arena_init(&context->ast_arena, 1024 * 1024);
+  arena_init(&context->thir_arena, 1024 * 1024);
+  arena_init(&context->type_arena, 1024 * 1024);
+  arena_init(&context->binding_arena, 1024 * 1024);
+
   Type *integer_type = type_alloc(context);
   context->integer_type = integer_type;
   integer_type->name = "int";

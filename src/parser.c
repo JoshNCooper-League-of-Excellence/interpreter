@@ -222,7 +222,6 @@ Ast *parse_postfix(Lexer *lexer, Context *context) {
 
   if (operand->tag == AST_IDENTIFIER && lexer_next(lexer) == TOKEN_LPAREN) {
     Ast *call = parse_call(operand->identifier, lexer, context);
-    free(operand);
     operand = call;
   }
 

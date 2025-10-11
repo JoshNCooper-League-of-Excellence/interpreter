@@ -1,6 +1,7 @@
 #ifndef BINDING_H
 #define BINDING_H
 
+#include "arena.h"
 #include "lexer.h"
 #include "list.h"
 #include "type.h"
@@ -43,6 +44,8 @@ typedef struct {
   Thir_Ptr_list thir_list;
 
   Type *typer_expected_type;
+
+  Arena type_arena, ast_arena, thir_arena, binding_arena, function_type_arena, struct_type_arena;
 } Context;
 
 static inline bool try_find_type(Context *context, const char *name,

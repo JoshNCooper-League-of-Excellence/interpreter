@@ -1,3 +1,16 @@
+/* 
+  todo:
+  [] scope
+  [] typed operands for ir
+  [] allocators 
+  [] either sized arrays or get rid of arrays
+  [] be able to manipulate unmanaged pointers with non-extern code
+  [] be able to take non-array managed pointers
+  [] string literals of string type, not byte*
+  [] improve ffi for structs, actual marshalling  
+*/
+
+
 extern puts :: (byte*) int;
 extern printf :: (byte*, void*) int;
 extern strlen :: (byte*) int;
