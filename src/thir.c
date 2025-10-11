@@ -417,8 +417,18 @@ Thir *type_binary(Ast *ast, Context *context) {
     TODO("Pointers not implemented, therefore & and * unarys are not "
          "implemented");
   case OPERATOR_INDEX:
-    TODO("Arrays not implemented, therefore [] index operators are not "
-         "implemented");
+    Type *array_type = left->type;
+    if (!type_is_array(array_type)) {
+      fprintf(stderr, "unable to use index on non-array types currently\n");
+      exit(1);
+    }
+    Type *index_type = right->type;
+    if (index_type->tag != TYPE_INT) {
+      fprintf(stderr, "cannot index into arrays with non-integer index\n");
+      exit(1);
+    }
+
+    binary->type = array_type->pointee;
   case OPERATOR_XOR:
   case OPERATOR_PLUS_ASSIGN:
   case OPERATOR_MINUS_ASSIGN:

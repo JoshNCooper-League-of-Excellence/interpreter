@@ -141,26 +141,44 @@ void vm_execute(Module *m) {
       integer ty_idx = instr.b;
       integer length = instr.c;
       Type *type = m->types.data[ty_idx];
-
       if (length == 0) {
         sf->locals[dest] = default_value_of_type(type, sf->uid);
       } else {
         sf->locals[dest] = default_array_of_type(type, sf->uid, length);
       }
+      continue;
+    }
+    case OP_MEMBER_LOAD_INDIRECT: {
+      integer dest = instr.a;
+      integer src = instr.b;
+      integer ptr = instr.c;
+      integer idx = sf->locals[ptr].integer;
+
+      Value *val = &sf->locals[src];
+      if (val->tag == VALUE_STRUCT) {
+        sf->locals[dest] = val->$struct.members[idx];
+      } else if (val->tag == VALUE_POINTER) {
+        if (val->pointer.pointee == POINTEE_VALUE) {
+          Value *elements = val->pointer.elements;
+          sf->locals[dest] = elements[idx];
+        } else {
+          VM_ERRF("OP_MEMBER_LOAD not supported for unmanged pointers or arrays yet");
+        }
+      }
 
       continue;
     }
-
     case OP_MEMBER_LOAD: {
       integer dest = instr.a;
-      integer struct_slot = instr.b;
-      integer member_idx = instr.c;
-      Value *val = &sf->locals[struct_slot];
+      integer src = instr.b;
+      integer idx = instr.c;
+      Value *val = &sf->locals[src];
       if (val->tag == VALUE_STRUCT) {
-        sf->locals[dest] = val->$struct.members[member_idx];
+        sf->locals[dest] = val->$struct.members[idx];
       } else if (val->tag == VALUE_POINTER) {
         if (val->pointer.pointee == POINTEE_VALUE) {
-          sf->locals[dest] = ((Value *)val->pointer.elements)[member_idx];
+          Value *elements = val->pointer.elements;
+          sf->locals[dest] = elements[idx];
         } else {
           VM_ERRF("OP_MEMBER_LOAD not supported for unmanged pointers or arrays yet");
         }
@@ -547,7 +565,7 @@ Value default_value_of_type(Type *type, unsigned owner_uid) {
 }
 
 void value_free(Value *value, unsigned owner_uid) {
-  if (value->tag == VALUE_STRUCT && value->owner_uid != owner_uid) {
+  if (value->tag == VALUE_STRUCT && value->owner_uid == owner_uid) {
     for (unsigned i = 0; i < value->$struct.length; ++i) {
       value_free(&value->$struct.members[i], owner_uid);
     }

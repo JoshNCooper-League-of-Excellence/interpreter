@@ -163,18 +163,19 @@ typedef enum {
   AST_PROGRAM,
   AST_LITERAL,
   AST_IDENTIFIER,
-  AST_BLOCK,
   AST_FUNCTION,
   AST_UNARY,
   AST_BINARY,
+  AST_AGGREGATE_INITIALIZER,
+  AST_MEMBER_ACCESS,
+  
+  AST_BLOCK,
   AST_RETURN,
   AST_VARIABLE,
   AST_CALL,
   AST_EXTERN,
   AST_TYPE,
-  AST_AGGREGATE_INITIALIZER,
   AST_STRUCT,
-  AST_MEMBER_ACCESS,
   AST_IF,
 } Ast_Tag;
 
@@ -316,6 +317,7 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   sb_append(sb, "\n");
 
   switch (node->tag) {
+
   case AST_IF:
     print_indent(sb, indent + 1);
     sb_append(sb, "condition:\n");

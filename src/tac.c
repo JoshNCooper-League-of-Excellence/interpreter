@@ -203,7 +203,7 @@ int lower_member_assignment(Thir *lhs, int rhs, Function *fn) {
   return rhs; // assignment expression result
 }
 
-int lower_get_lvalue_value(Thir *lhs, Function *fn, Module *m) {
+int lower_get_lvalue(Thir *lhs, Function *fn, Module *m) {
   switch (lhs->tag) {
   case THIR_MEMBER_ACCESS:
     return lower_member_rvalue(lhs, fn, m);
@@ -219,7 +219,7 @@ int lower_get_lvalue_value(Thir *lhs, Function *fn, Module *m) {
   }
 }
 
-void lower_set_lvalue_value(Thir *lhs, int value, Function *fn) {
+void lower_set_lvalue(Thir *lhs, int value, Function *fn) {
   switch (lhs->tag) {
   case THIR_MEMBER_ACCESS:
     (void)lower_member_assignment(lhs, value, fn);
@@ -287,12 +287,12 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
   case THIR_BINARY: {
     if (n->binary.op == OPERATOR_ASSIGN) {
       int rhs = lower_expression(n->binary.right, fn, m);
-      lower_set_lvalue_value(n->binary.left, rhs, fn);
+      lower_set_lvalue(n->binary.left, rhs, fn);
       return rhs;
     }
 
     if (operator_is_compound(n->binary.op)) {
-      int lhs_val = lower_get_lvalue_value(n->binary.left, fn, m);
+      int lhs_val = lower_get_lvalue(n->binary.left, fn, m);
       int rhs = lower_expression(n->binary.right, fn, m);
       int res = generate_temp(fn);
 
@@ -326,7 +326,7 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
         exit(1);
       }
 
-      lower_set_lvalue_value(n->binary.left, res, fn);
+      lower_set_lvalue(n->binary.left, res, fn);
       return res;
     }
 
@@ -394,6 +394,9 @@ int lower_expression(Thir *n, Function *fn, Module *m) {
       break;
     case OPERATOR_SHIFT_RIGHT:
       EMIT_SHIFT_RIGHT(fn->code, dest, l, r);
+      break;
+    case OPERATOR_INDEX: 
+      EMIT_MEMBER_LOAD_INDIRECT(fn->code, dest, l, r);
       break;
     default:
       fprintf(stderr, "lower_expression: unhandled binary op %d\n", n->binary.op);

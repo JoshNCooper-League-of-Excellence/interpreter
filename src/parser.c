@@ -175,6 +175,8 @@ Ast *parse_call(const char *callee, Lexer *lexer, Context *context) {
 
 Ast *parse_postfix(Lexer *lexer, Context *context) {
   Ast *operand = parse_primary(lexer, context);
+
+  // TODO: make this one big while loop, not several
   while (lexer_next(lexer) == TOKEN_DOT) {
     BEGIN_SPAN(lexer_eat(lexer));
     Token member = EXPECT(TOKEN_IDENTIFIER);
@@ -183,6 +185,18 @@ Ast *parse_postfix(Lexer *lexer, Context *context) {
     member_access->member_access.base = operand;
     member_access->member_access.member = member.value;
     operand = member_access;
+  }
+
+  while (lexer_next(lexer) == TOKEN_LBRACKET) {
+    BEGIN_SPAN(lexer_eat(lexer));
+    Ast *index = parse_expression(lexer, context);
+    EXPECT(TOKEN_RBRACKET);
+    END_SPAN();
+    Ast *index_expr = ast_alloc(context, AST_BINARY, span);
+    index_expr->binary.op = OPERATOR_INDEX;
+    index_expr->binary.left = operand;
+    index_expr->binary.right = index;
+    operand = index_expr;
   }
 
   if (operand->tag == AST_IDENTIFIER && lexer_next(lexer) == TOKEN_LPAREN) {
