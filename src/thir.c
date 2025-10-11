@@ -46,6 +46,13 @@ Binding_Ptr_list typer_convert_parameters(Context *context, Parameter_list param
     Thir_Ptr thir_param = thir_alloc(context, THIR_VARIABLE, span);
     Type *param_type = get_type_from_ast_type(param.type, context);
 
+    if (!param_type) {
+      fprintf(stderr, "use of undeclared type for parameter '%s' at: %s\n",
+              param.nameless ? "<nameless parameter>" : param.name,
+              lexer_span_to_string(span));
+      exit(1);
+    }
+
     Binding binding = {.thir = thir_param,
                        .ast = nullptr,
                        .name = param.nameless ? "<nameless parameter>" : param.name,

@@ -1,4 +1,5 @@
-extern assert :: (int, string) void;
+extern assert :: (int, byte*) void;
+extern puts :: (byte*) void;
 
 main :: () void {
   a int = 10;
@@ -36,4 +37,6 @@ main :: () void {
   assert((a >= b) == true, "a >= b == true");
   assert((b >= a) == false, "b >= a == false");
   assert((a >= 10) == true, "a >= 10 == true");
+
+  puts("expr_bin.b passed");
 }
