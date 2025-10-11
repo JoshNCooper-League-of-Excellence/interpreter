@@ -20,7 +20,7 @@ void print_ast_function_header(Ast *function, String_Builder *sb) {
 #define EXPECT($expected)                                                      \
   ({                                                                           \
     Token tok = lexer_peek(lexer);                                             \
-    if (tok.type != $expected) {                                               \
+    if (tok.type != ((Token_Type)$expected)) {                                               \
       char *error_msg;                                                         \
       asprintf(                                                                \
           &error_msg, "unexpected token at %s:%zu:%zu, expected %s, got %s\n", \
@@ -94,6 +94,23 @@ Ast *parse_program(Lexer *lexer, Context *context) {
   return program;
 }
 
+Ast *parse_while(Lexer *lexer, Context *context) {
+  BEGIN_SPAN(EXPECT(TOKEN_WHILE));
+  Ast *condition = nullptr;
+  if (lexer_next(lexer) != TOKEN_LCURLY) {
+    condition = parse_expression(lexer, context);
+  }
+
+  assert(lexer_next(lexer) == TOKEN_LCURLY && "expected lcurly");
+
+  Ast *block = parse_block(lexer, context);
+  END_SPAN()
+  Ast *the_while = ast_alloc(context, AST_WHILE, span);
+  the_while->$while.block = block;
+  the_while->$while.condition = condition;
+  return the_while;
+}
+
 Ast *parse_block(Lexer *lexer, Context *context) {
   BEGIN_SPAN(EXPECT(TOKEN_LCURLY))
   Ast_Ptr_list statements = {0};
@@ -106,6 +123,10 @@ Ast *parse_block(Lexer *lexer, Context *context) {
 
     bool expect_semi = true;
     switch (peeked.type) {
+    case TOKEN_WHILE: 
+      expect_semi = false;
+      LIST_PUSH(statements, OK(parse_while(lexer, context)));
+      break;
     case TOKEN_IF:
       expect_semi = false;
       LIST_PUSH(statements, OK(parse_if(lexer, context)));

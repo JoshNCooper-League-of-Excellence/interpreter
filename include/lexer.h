@@ -16,7 +16,7 @@
 #include <string.h>
 
 typedef enum {
-  TOKEN_EOF = -1,
+  TOKEN_EOF = 0,
 
   TOKEN_IDENTIFIER,
 
@@ -42,6 +42,7 @@ typedef enum {
 
   TOKEN_IF,
   TOKEN_ELSE,
+  TOKEN_WHILE,
 
   TOKEN_PLUS,
   TOKEN_MINUS,
@@ -77,78 +78,50 @@ typedef enum {
 } Token_Type;
 
 static inline const char *token_type_to_string(Token_Type type) {
-  switch (type) {
-  case TOKEN_TRUE:
-    return "TRUE";
-  case TOKEN_FALSE:
-    return "FALSE";
-  case TOKEN_EXTERN:
-    return "EXTERN";
-  case TOKEN_STRUCT:
-    return "STRUCT";
-  case TOKEN_DOT:
-    return "DOT";
-  case TOKEN_SHIFT_LEFT:
-    return "SHIFT_LEFT";
-  case TOKEN_SHIFT_RIGHT:
-    return "SHIFT_RIGHT";
-  case TOKEN_LOGICAL_AND:
-    return "LOGICAL_AND";
-  case TOKEN_LOGICAL_OR:
-    return "LOGICAL_OR";
-  case TOKEN_LOGICAL_NOT:
-    return "LOGICAL_NOT";
-  case TOKEN_EQUALS:
-    return "EQUALS";
-  case TOKEN_NOT_EQUALS:
-    return "NOT_EQUALS";
-  case TOKEN_GREATER:
-    return "GREATER";
-  case TOKEN_LESS:
-    return "LESS";
-  case TOKEN_BIT_AND:
-    return "BIT_AND";
-  case TOKEN_BIT_OR:
-    return "BIT_OR";
-  case TOKEN_BIT_NOT:
-    return "BIT_NOT";
-  case TOKEN_EOF:
-    return "EOF";
-  case TOKEN_IDENTIFIER:
-    return "IDENTIFIER";
-  case TOKEN_INTEGER:
-    return "INTEGER";
-  case TOKEN_STRING:
-    return "STRING";
-  case TOKEN_COLON:
-    return "COLON";
-  case TOKEN_LPAREN:
-    return "LPAREN";
-  case TOKEN_RPAREN:
-    return "RPAREN";
-  case TOKEN_LCURLY:
-    return "LCURLY";
-  case TOKEN_RCURLY:
-    return "RCURLY";
-  case TOKEN_SEMI:
-    return "SEMI";
-  case TOKEN_COMMA:
-    return "COMMA";
-  case TOKEN_RETURN:
-    return "RETURN";
-  case TOKEN_PLUS:
-    return "PLUS";
-  case TOKEN_MINUS:
-    return "MINUS";
-  case TOKEN_SLASH:
-    return "SLASH";
-  case TOKEN_STAR:
-    return "STAR";
-  case TOKEN_ASSIGN:
-    return "ASSIGN";
-  default:
+  static const char *lut[] = {[TOKEN_EOF] = "EOF",
+                              [TOKEN_IDENTIFIER] = "IDENTIFIER",
+                              [TOKEN_INTEGER] = "INTEGER",
+                              [TOKEN_STRING] = "STRING",
+                              [TOKEN_TRUE] = "TRUE",
+                              [TOKEN_FALSE] = "FALSE",
+                              [TOKEN_COLON] = "COLON",
+                              [TOKEN_LPAREN] = "LPAREN",
+                              [TOKEN_RPAREN] = "RPAREN",
+                              [TOKEN_LCURLY] = "LCURLY",
+                              [TOKEN_RCURLY] = "RCURLY",
+                              [TOKEN_SEMI] = "SEMI",
+                              [TOKEN_COMMA] = "COMMA",
+                              [TOKEN_EXTERN] = "EXTERN",
+                              [TOKEN_RETURN] = "RETURN",
+                              [TOKEN_IF] = "IF",
+                              [TOKEN_ELSE] = "ELSE",
+                              [TOKEN_WHILE] = "WHILE",
+                              [TOKEN_PLUS] = "PLUS",
+                              [TOKEN_MINUS] = "MINUS",
+                              [TOKEN_SLASH] = "SLASH",
+                              [TOKEN_STAR] = "STAR",
+                              [TOKEN_ASSIGN] = "ASSIGN",
+                              [TOKEN_XOR] = "XOR",
+                              [TOKEN_STRUCT] = "STRUCT",
+                              [TOKEN_DOT] = "DOT",
+                              [TOKEN_SHIFT_LEFT] = "SHIFT_LEFT",
+                              [TOKEN_SHIFT_RIGHT] = "SHIFT_RIGHT",
+                              [TOKEN_LOGICAL_AND] = "LOGICAL_AND",
+                              [TOKEN_LOGICAL_OR] = "LOGICAL_OR",
+                              [TOKEN_LOGICAL_NOT] = "LOGICAL_NOT",
+                              [TOKEN_EQUALS] = "EQUALS",
+                              [TOKEN_NOT_EQUALS] = "NOT_EQUALS",
+                              [TOKEN_GREATER] = "GREATER",
+                              [TOKEN_LESS] = "LESS",
+                              [TOKEN_BIT_AND] = "BIT_AND",
+                              [TOKEN_BIT_OR] = "BIT_OR",
+                              [TOKEN_BIT_NOT] = "BIT_NOT",
+                              [TOKEN_PERCENT] = "PERCENT",
+                              [TOKEN_LBRACKET] = "LBRACKET",
+                              [TOKEN_RBRACKET] = "RBRACKET"};
+  if (type < 0 || type >= (int)(sizeof(lut) / sizeof(lut[0])) || lut[type] == NULL)
     return "UNKNOWN";
-  }
+  return lut[type];
 }
 
 typedef struct {
@@ -159,8 +132,7 @@ extern const char *CURRENTLY_COMPILING_FILE_NAME;
 
 static inline char *lexer_span_to_string(Span span) {
   char *buffer = malloc(64);
-  snprintf(buffer, 64, "%s:%zu:%zu", CURRENTLY_COMPILING_FILE_NAME, span.line,
-           span.col);
+  snprintf(buffer, 64, "%s:%zu:%zu", CURRENTLY_COMPILING_FILE_NAME, span.line, span.col);
   return buffer;
 }
 
@@ -211,8 +183,7 @@ static inline Token lexer_gettok(Lexer *lexer) {
     start = lexer->pos;
 
     // Single-line comment (// ...)
-    if (c == '/' && lexer->pos + 1 < lexer->length &&
-        lexer->input[lexer->pos + 1] == '/') {
+    if (c == '/' && lexer->pos + 1 < lexer->length && lexer->input[lexer->pos + 1] == '/') {
       lexer->pos += 2;
       lexer->col += 2;
       while (lexer->pos < lexer->length && lexer->input[lexer->pos] != '\n') {
@@ -228,13 +199,11 @@ static inline Token lexer_gettok(Lexer *lexer) {
     }
 
     // Multi-line comment (/* ... */)
-    if (c == '/' && lexer->pos + 1 < lexer->length &&
-        lexer->input[lexer->pos + 1] == '*') {
+    if (c == '/' && lexer->pos + 1 < lexer->length && lexer->input[lexer->pos + 1] == '*') {
       lexer->pos += 2;
       lexer->col += 2;
       while (lexer->pos < lexer->length) {
-        if (lexer->input[lexer->pos] == '*' && lexer->pos + 1 < lexer->length &&
-            lexer->input[lexer->pos + 1] == '/') {
+        if (lexer->input[lexer->pos] == '*' && lexer->pos + 1 < lexer->length && lexer->input[lexer->pos + 1] == '/') {
           lexer->pos += 2;
           lexer->col += 2;
           break;
@@ -268,8 +237,7 @@ static inline Token lexer_gettok(Lexer *lexer) {
       }
 
       if (lexer->pos >= lexer->length) {
-        fprintf(stderr, "unterminated string literal at %s:%zu:%zu\n",
-                lexer->filename, begin_line, begin_col);
+        fprintf(stderr, "unterminated string literal at %s:%zu:%zu\n", lexer->filename, begin_line, begin_col);
         exit(1);
       }
 
@@ -279,15 +247,13 @@ static inline Token lexer_gettok(Lexer *lexer) {
       str[len] = '\0';
       lexer->pos++; // skip closing quote
       lexer->col++;
-      return (Token){str, true, TOKEN_STRING,
-                     .span = {begin_line, begin_col, len + 2, start - 1}};
+      return (Token){str, true, TOKEN_STRING, .span = {begin_line, begin_col, len + 2, start - 1}};
     }
 
     if (isalpha(c)) {
       size_t begin_line = lexer->line;
       size_t begin_col = lexer->col;
-      while (lexer->pos < lexer->length && (isalnum(lexer->input[lexer->pos]) ||
-                                            lexer->input[lexer->pos] == '_')) {
+      while (lexer->pos < lexer->length && (isalnum(lexer->input[lexer->pos]) || lexer->input[lexer->pos] == '_')) {
         lexer->pos++;
         lexer->col++;
       }
@@ -297,26 +263,19 @@ static inline Token lexer_gettok(Lexer *lexer) {
         const char *kw;
         Token_Type type;
         size_t len;
-      } keywords[] = {
-          {"extern", TOKEN_EXTERN, 6}, {"true", TOKEN_TRUE, 4},
-          {"false", TOKEN_FALSE, 5},   {"struct", TOKEN_STRUCT, 6},
-          {"return", TOKEN_RETURN, 6}, {"if", TOKEN_IF, 2},
-          {"else", TOKEN_ELSE, 4}
-      };
+      } keywords[] = {{"extern", TOKEN_EXTERN, 6}, {"true", TOKEN_TRUE, 4},     {"false", TOKEN_FALSE, 5},
+                      {"struct", TOKEN_STRUCT, 6}, {"return", TOKEN_RETURN, 6}, {"if", TOKEN_IF, 2},
+                      {"else", TOKEN_ELSE, 4},     {"while", TOKEN_WHILE, 5}};
 
       for (size_t i = 0; i < sizeof(keywords) / sizeof(keywords[0]); ++i) {
-        if (len == keywords[i].len &&
-            strncmp(lexer->input + start, keywords[i].kw, keywords[i].len) ==
-                0) {
-          return (Token){nullptr, false, keywords[i].type,
-                         .span = {begin_line, begin_col, len, start}};
+        if (len == keywords[i].len && strncmp(lexer->input + start, keywords[i].kw, keywords[i].len) == 0) {
+          return (Token){nullptr, false, keywords[i].type, .span = {begin_line, begin_col, len, start}};
         }
       }
       char *ident = malloc(len + 1);
       strncpy(ident, lexer->input + start, len);
       ident[len] = '\0';
-      return (Token){ident, true, TOKEN_IDENTIFIER,
-                     .span = {begin_line, begin_col, len, start}};
+      return (Token){ident, true, TOKEN_IDENTIFIER, .span = {begin_line, begin_col, len, start}};
     } else if (isdigit(c)) {
       size_t start = lexer->pos;
       size_t begin_line = lexer->line;
@@ -329,8 +288,7 @@ static inline Token lexer_gettok(Lexer *lexer) {
       char *num = malloc(len + 1);
       strncpy(num, lexer->input + start, len);
       num[len] = '\0';
-      return (Token){num, true, TOKEN_INTEGER,
-                     .span = {begin_line, begin_col, len, start}};
+      return (Token){num, true, TOKEN_INTEGER, .span = {begin_line, begin_col, len, start}};
     } else if (ispunct(c)) {
       size_t begin_line = lexer->line;
       size_t begin_col = lexer->col;
@@ -448,14 +406,12 @@ static inline Token lexer_gettok(Lexer *lexer) {
         break;
       }
       if (type == TOKEN_EOF) {
-        fprintf(stderr, "unknown operator in input ('%c') at %s:%zu:%zu", c,
-                lexer->filename, lexer->line, lexer->col);
+        fprintf(stderr, "unknown operator in input ('%c') at %s:%zu:%zu", c, lexer->filename, lexer->line, lexer->col);
         lexer->pos++;
         lexer->col++;
         continue;
       }
-      return (Token){nullptr, false, type,
-                     .span = {begin_line, begin_col, 1, start}};
+      return (Token){nullptr, false, type, .span = {begin_line, begin_col, 1, start}};
     }
     if (isspace(c)) {
       if (c == '\n') {
@@ -467,15 +423,13 @@ static inline Token lexer_gettok(Lexer *lexer) {
       lexer->pos++;
       continue;
     } else {
-      fprintf(stderr, "unexpected character in input ('%c') at %s:%zu:%zu", c,
-              lexer->filename, lexer->line, lexer->col);
+      fprintf(stderr, "unexpected character in input ('%c') at %s:%zu:%zu", c, lexer->filename, lexer->line, lexer->col);
       lexer->pos++;
       lexer->col++;
       continue;
     }
   }
-  return (Token){.type = TOKEN_EOF,
-                 .span = {lexer->line, lexer->col, 0, start}};
+  return (Token){.type = TOKEN_EOF, .span = {lexer->line, lexer->col, 0, start}};
 }
 
 #define LEXER_BUFFER_SIZE 8
@@ -499,32 +453,26 @@ static inline Token lexer_eat(Lexer *lexer) {
   return tok;
 }
 
-static inline Token lexer_expect(Lexer *lexer, Token_Type expected,
-                                 char **error) {
+static inline Token lexer_expect(Lexer *lexer, Token_Type expected, char **error) {
   lexer_fill_buffer(lexer);
   Token tok = lexer->lookahead.data[0];
   if (tok.type != expected) {
-    asprintf(error, "unexpected token at %s:%zu:%zu, expected %d, got %d\n",
-             lexer->filename, tok.span.line, tok.span.col, expected, tok.type);
+    asprintf(error, "unexpected token at %s:%zu:%zu, expected %d, got %d\n", lexer->filename, tok.span.line, tok.span.col,
+             expected, tok.type);
     return (Token){.type = TOKEN_EOF, .span = tok.span};
   }
   LIST_REMOVE(lexer->lookahead, 0);
   return tok;
 }
 
-static inline bool lexer_next_is(Lexer *lexer, Token_Type expected) {
-  return lexer_peek(lexer).type == expected;
-}
+static inline bool lexer_next_is(Lexer *lexer, Token_Type expected) { return lexer_peek(lexer).type == expected; }
 
-static inline bool lexer_next_is_and_not_eof(Lexer *lexer,
-                                             Token_Type expected) {
+static inline bool lexer_next_is_and_not_eof(Lexer *lexer, Token_Type expected) {
   Token tok = lexer_peek(lexer);
   return tok.type == expected && tok.type != TOKEN_EOF;
 }
 
-static inline Token_Type lexer_next(Lexer *lexer) {
-  return lexer_peek(lexer).type;
-}
+static inline Token_Type lexer_next(Lexer *lexer) { return lexer_peek(lexer).type; }
 
 static inline Span lexer_span(Lexer *lexer) { return lexer_peek(lexer).span; }
 
@@ -566,6 +514,5 @@ static inline bool lexer_next_is_operator(Lexer *lexer) {
   Token_Type type = lexer_next(lexer);
   return token_is_operator(type);
 }
-
 
 #endif

@@ -21,6 +21,7 @@ typedef enum {
   THIR_ARRAY_INITIALIZER,
   THIR_MEMBER_ACCESS,
   THIR_IF,
+  THIR_LOOP,
 } Thir_Tag;
 
 #include "ffi.h"
@@ -51,6 +52,15 @@ typedef struct Thir {
   union {
     Thir_Ptr_list program;
     Thir_Ptr_list block;
+
+    // Both while and for use this.
+    // while just doesn't use the initializer nor increment
+    struct {
+      struct Thir *initializer; // optional.
+      struct Thir *condition;
+      struct Thir *increment; // optional
+      struct Thir *block;
+    } loop;
 
     struct {
       struct Thir *condition;
@@ -141,8 +151,10 @@ static const char *thir_tag_names[] = {
   "CALL",
   "EXTERN",
   "AGGREGATE_INITIALIZER",
+  "ARRAY_INITIALIZER",
   "MEMBER_ACCESS",
-  "IF"
+  "IF",
+  "LOOP"
 };
 
 static inline void print_indent_ir(String_Builder *sb, int indent) {
@@ -162,13 +174,28 @@ static inline void print_ir_rec(Thir *node, String_Builder *sb, int indent) {
   sb_append(sb, "\n");
 
   switch (node->tag) {
-    case THIR_ARRAY_INITIALIZER:
+  case THIR_LOOP:
+    if (node->loop.initializer) {
       print_indent_ir(sb, indent + 1);
-      sb_append(sb, "values:\n");
-      for (size_t i = 0; i < node->array_initializer.values.length; ++i) {
-        print_ir_rec(node->array_initializer.values.data[i], sb, indent + 2);
-      }
-      break;
+      sb_append(sb, "initializer:\n");
+      print_ir_rec((Thir *)node->loop.initializer, sb, indent + 2);
+    }
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "condition:\n");
+    print_ir_rec((Thir *)node->loop.condition, sb, indent + 2);
+    if (node->loop.increment) {
+      print_indent_ir(sb, indent + 1);
+      sb_append(sb, "increment:\n");
+      print_ir_rec((Thir *)node->loop.increment, sb, indent + 2);
+    }
+    break;
+  case THIR_ARRAY_INITIALIZER:
+    print_indent_ir(sb, indent + 1);
+    sb_append(sb, "values:\n");
+    for (size_t i = 0; i < node->array_initializer.values.length; ++i) {
+      print_ir_rec(node->array_initializer.values.data[i], sb, indent + 2);
+    }
+    break;
   case THIR_IF:
     print_indent_ir(sb, indent + 1);
     sb_append(sb, "condition:\n");
@@ -208,9 +235,7 @@ static inline void print_ir_rec(Thir *node, String_Builder *sb, int indent) {
     sb_append(sb, "\n");
     print_indent_ir(sb, indent + 1);
     sb_append(sb, "return_type: ");
-    sb_append(sb, node->extern_function.return_type
-                      ? node->extern_function.return_type->name
-                      : "void");
+    sb_append(sb, node->extern_function.return_type ? node->extern_function.return_type->name : "void");
     sb_append(sb, "\n");
     print_indent_ir(sb, indent + 1);
     sb_append(sb, "parameters:\n");
@@ -246,8 +271,7 @@ static inline void print_ir_rec(Thir *node, String_Builder *sb, int indent) {
     sb_append(sb, "\n");
     print_indent_ir(sb, indent + 1);
     sb_append(sb, "return_type: ");
-    sb_append(sb, node->function.return_type ? node->function.return_type->name
-                                             : "void");
+    sb_append(sb, node->function.return_type ? node->function.return_type->name : "void");
     sb_append(sb, "\n");
     print_indent_ir(sb, indent + 1);
     sb_append(sb, "parameters:\n");
@@ -312,8 +336,6 @@ static inline void print_ir_rec(Thir *node, String_Builder *sb, int indent) {
   }
 }
 
-static inline void print_ir(Thir *ir, String_Builder *sb) {
-  print_ir_rec(ir, sb, 0);
-}
+static inline void print_ir(Thir *ir, String_Builder *sb) { print_ir_rec(ir, sb, 0); }
 
 #endif

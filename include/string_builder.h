@@ -19,7 +19,7 @@ typedef struct String_Builder {
 } String_Builder;
 
 static inline void sb_append(String_Builder *sb, const char *str) {
-  size_t str_len = strlen(str);
+  unsigned long long str_len = strlen(str);
   while (sb->length + str_len >= sb->capacity) {
     sb->capacity = sb->capacity * 2 + str_len;
     sb->value = (char *)realloc(sb->value, sb->capacity);

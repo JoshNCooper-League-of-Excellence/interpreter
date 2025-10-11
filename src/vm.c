@@ -80,14 +80,6 @@ static inline char *fix_escape_characters(const char *s) {
   return result;
 }
 
-#define FETCH()                                                                                                             \
-  do {                                                                                                                      \
-    if (sf->ip >= sf->fn->code.length)                                                                                      \
-      goto L_RETURN_TO_CALLER;                                                                                              \
-    instr = sf->fn->code.data[sf->ip++];                                                                                    \
-    goto *dispatch[instr.op];                                                                                               \
-  } while (0)
-
 void vm_execute(Module *m) {
   if (m->functions.length == 0) {
     VM_ERRF("module had no function, so we have nothing to execute.");
@@ -119,7 +111,7 @@ void vm_execute(Module *m) {
   integer sp = 0; // stack pointer (into call_stack)
 
   Value arg_stack[64];
-  integer arg_p = 0;
+  unsigned arg_p = 0;
 
 #define ENTRY_POINT_CALLER -1
 
@@ -137,9 +129,9 @@ void vm_execute(Module *m) {
 
     switch (instr.op) {
     case OP_ALLOCA: {
-      integer dest = instr.a;
-      integer ty_idx = instr.b;
-      integer length = instr.c;
+      signed dest = instr.a;
+      signed ty_idx = instr.b;
+      signed length = instr.c;
       Type *type = m->types.data[ty_idx];
       if (length == 0) {
         sf->locals[dest] = default_value_of_type(type, sf->uid);
@@ -150,9 +142,9 @@ void vm_execute(Module *m) {
     }
 
     case OP_MEMBER_LOAD_INDIRECT: {
-      integer dest = instr.a;
-      integer src = instr.b;
-      integer ptr = instr.c;
+      signed dest = instr.a;
+      signed src = instr.b;
+      signed ptr = instr.c;
       integer idx = sf->locals[ptr].integer;
 
       Value *val = &sf->locals[src];
@@ -171,9 +163,9 @@ void vm_execute(Module *m) {
     }
 
     case OP_MEMBER_LOAD: {
-      integer dest = instr.a;
-      integer src = instr.b;
-      integer idx = instr.c;
+      signed dest = instr.a;
+      signed src = instr.b;
+      signed idx = instr.c;
       Value *val = &sf->locals[src];
       if (val->tag == VALUE_STRUCT) {
         sf->locals[dest] = val->$struct.members[idx];
@@ -190,9 +182,9 @@ void vm_execute(Module *m) {
     }
 
     case OP_MEMBER_STORE: {
-      integer struct_slot = instr.a;
-      integer member_idx = instr.b;
-      integer src = instr.c;
+      signed struct_slot = instr.a;
+      signed member_idx = instr.b;
+      signed src = instr.c;
       Value *val = &sf->locals[struct_slot];
       if (val->tag == VALUE_STRUCT) {
         val->$struct.members[member_idx] = sf->locals[src];
@@ -207,9 +199,9 @@ void vm_execute(Module *m) {
     }
 
     case OP_MEMBER_STORE_INDIRECT: {
-      integer temp = instr.a;
-      integer ptr = instr.b;
-      integer src = instr.c;
+      signed temp = instr.a;
+      signed ptr = instr.b;
+      signed src = instr.c;
       Value *val = &sf->locals[temp];
       integer index = sf->locals[ptr].integer;
 
@@ -224,51 +216,51 @@ void vm_execute(Module *m) {
       }
       continue;
     }
-    
+
     case OP_CONST: {
-      integer dest = instr.a;
-      integer cidx = instr.b;
+      signed dest = instr.a;
+      signed cidx = instr.b;
       sf->locals[dest] = constants[cidx];
       continue;
     }
 
     case OP_LOAD: {
-      integer dest = instr.a;
-      integer slot = instr.b;
+      signed dest = instr.a;
+      signed slot = instr.b;
       sf->locals[dest] = sf->locals[slot];
       continue;
     }
 
     case OP_STORE: {
-      integer slot = instr.a;
-      integer src = instr.b;
+      signed slot = instr.a;
+      signed src = instr.b;
       sf->locals[slot] = sf->locals[src];
       continue;
     }
 
     case OP_ADD: {
-      integer d = instr.a, l = instr.b, r = instr.c;
+      signed d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = sf->locals[l].integer + sf->locals[r].integer;
       sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_SUB: {
-      integer d = instr.a, l = instr.b, r = instr.c;
+      signed d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = sf->locals[l].integer - sf->locals[r].integer;
       sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_MUL: {
-      integer d = instr.a, l = instr.b, r = instr.c;
+      signed d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = sf->locals[l].integer * sf->locals[r].integer;
       sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_DIV: {
-      integer d = instr.a, l = instr.b, r = instr.c;
+      signed d = instr.a, l = instr.b, r = instr.c;
       integer rvalue = sf->locals[r].integer;
       if (rvalue == 0) {
         VM_ERRF("attempted to divide by zero. (div) ip=%d, fn=%s", sf->ip, sf->fn->name);
@@ -279,25 +271,25 @@ void vm_execute(Module *m) {
     }
 
     case OP_PUSH: {
-      integer src = instr.a;
+      signed src = instr.a;
       arg_stack[arg_p++] = sf->locals[src];
       continue;
     }
 
     case OP_CALL_EXTERN: {
-      integer dest = instr.a;
-      integer func_idx = instr.b;
-      integer nargs = instr.c;
+      signed dest = instr.a;
+      signed func_idx = instr.b;
+      signed nargs = instr.c;
 
       if (func_idx < 0 || (unsigned)func_idx >= CACHED_EXTERNS.length) {
-        VM_ERRF("invalid extern index %lld", func_idx);
+        VM_ERRF("invalid extern index %d", func_idx);
       }
       Extern_Function callee = CACHED_EXTERNS.data[func_idx];
 
       integer base = arg_p - nargs;
       if (base < 0) {
-        VM_ERRF("not enough arguments on arg stack for extern call (need=%lld "
-                "have=%lld)",
+        VM_ERRF("not enough arguments on arg stack for extern call (need=%d "
+                "have=%d)",
                 nargs, arg_p);
       }
 
@@ -308,12 +300,12 @@ void vm_execute(Module *m) {
     }
 
     case OP_CALL: {
-      integer dest = instr.a;
-      integer func_idx = instr.b;
-      integer nargs = instr.c;
+      signed dest = instr.a;
+      signed func_idx = instr.b;
+      signed nargs = instr.c;
 
       if (func_idx < 0 || (unsigned)func_idx >= m->functions.length) {
-        VM_ERRF("invalid function index %lld", func_idx);
+        VM_ERRF("invalid function index %d", func_idx);
       }
       Function *callee = m->functions.data[func_idx];
 
@@ -323,7 +315,7 @@ void vm_execute(Module *m) {
 
       integer base = arg_p - nargs;
       if (base < 0) {
-        VM_ERRF("not enough arguments on arg stack for call (need=%lld have=%lld)", nargs, arg_p);
+        VM_ERRF("not enough arguments on arg stack for call (need=%d have=%d)", nargs, arg_p);
       }
 
       integer new_sp = sp + 1;
@@ -339,7 +331,7 @@ void vm_execute(Module *m) {
     }
 
     case OP_RET: {
-      integer src = instr.a;
+      signed src = instr.a;
       Value rv = {.tag = VALUE_VOID};
       if (src >= 0) {
         rv = sf->locals[src];
@@ -359,63 +351,63 @@ void vm_execute(Module *m) {
     }
 
     case OP_NEGATE: {
-      integer dest = instr.a, src = instr.b;
+      signed dest = instr.a, src = instr.b;
       sf->locals[dest].integer = -sf->locals[src].integer;
       sf->locals[dest].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_LOGICAL_OR: {
-      integer d = instr.a, l = instr.b, r = instr.c;
+      signed d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer || sf->locals[r].integer);
       sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_LOGICAL_AND: {
-      integer d = instr.a, l = instr.b, r = instr.c;
+      signed d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer && sf->locals[r].integer);
       sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_SHIFT_LEFT: {
-      integer d = instr.a, l = instr.b, r = instr.c;
+      signed d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer << sf->locals[r].integer);
       sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_SHIFT_RIGHT: {
-      integer d = instr.a, l = instr.b, r = instr.c;
+      signed d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer >> sf->locals[r].integer);
       sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_XOR: {
-      integer d = instr.a, l = instr.b, r = instr.c;
+      signed d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer ^ sf->locals[r].integer);
       sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_BIT_OR: {
-      integer d = instr.a, l = instr.b, r = instr.c;
+      signed d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer | sf->locals[r].integer);
       sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_BIT_AND: {
-      integer d = instr.a, l = instr.b, r = instr.c;
+      signed d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer & sf->locals[r].integer);
       sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_MODULO: {
-      integer d = instr.a, l = instr.b, r = instr.c;
+      signed d = instr.a, l = instr.b, r = instr.c;
       integer rvalue = sf->locals[r].integer;
       if (rvalue == 0) {
         VM_ERRF("attempted to divide by zero. (modulo) ip=%d, fn=%s", sf->ip, sf->fn->name);
@@ -426,50 +418,50 @@ void vm_execute(Module *m) {
     }
 
     case OP_EQUALS: {
-      integer d = instr.a, l = instr.b, r = instr.c;
+      signed d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer == sf->locals[r].integer);
       sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_NOT_EQUALS: {
-      integer d = instr.a, l = instr.b, r = instr.c;
+      signed d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer != sf->locals[r].integer);
       sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_LESS: {
-      integer d = instr.a, l = instr.b, r = instr.c;
+      signed d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer < sf->locals[r].integer);
       sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_GREATER: {
-      integer d = instr.a, l = instr.b, r = instr.c;
+      signed d = instr.a, l = instr.b, r = instr.c;
       sf->locals[d].integer = (sf->locals[l].integer > sf->locals[r].integer);
       sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_LOGICAL_NOT: {
-      integer d = instr.a, s = instr.b;
+      signed d = instr.a, s = instr.b;
       sf->locals[d].integer = !sf->locals[s].integer;
       sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_BIT_NOT: {
-      integer d = instr.a, s = instr.b;
+      signed d = instr.a, s = instr.b;
       sf->locals[d].integer = ~sf->locals[s].integer;
       sf->locals[d].tag = VALUE_INTEGER;
       continue;
     }
 
     case OP_JUMP_IF: {
-      integer cond = instr.a;
-      integer target = instr.b;
+      signed cond = instr.a;
+      signed target = instr.b;
       if (sf->locals[cond].integer) {
         sf->ip += target;
       }
@@ -477,7 +469,7 @@ void vm_execute(Module *m) {
     }
 
     case OP_JUMP: {
-      integer target = instr.a;
+      signed target = instr.a;
       sf->ip += target;
       continue;
     }
@@ -513,7 +505,7 @@ void print_value(Value *value, String_Builder *sb) {
     sb_appendf(sb, "%d", value->integer);
     break;
   case VALUE_POINTER:
-    sb_appendf(sb, "{ ptr = %p, length = %lld, managed = %d }", value->pointer.elements, value->pointer.length,
+    sb_appendf(sb, "{ ptr = %p, length = %d, managed = %d }", value->pointer.elements, value->pointer.length,
                value->pointer.pointee == POINTEE_VALUE);
     break;
   case VALUE_STRUCT: {
@@ -761,9 +753,9 @@ Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc) {
     return_buf = NULL;
   }
 
-  integer prep = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned)n_params, ffi_return_type, arg_types);
+  ffi_status prep = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned)n_params, ffi_return_type, arg_types);
   if (prep != FFI_OK) {
-    fprintf(stderr, "[VM:FFI] ffi_prep_cif failed: %lld\n", prep);
+    fprintf(stderr, "[VM:FFI] ffi_prep_cif failed: %d\n", prep);
     exit(1);
   }
 

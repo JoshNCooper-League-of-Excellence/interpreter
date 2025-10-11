@@ -22,7 +22,7 @@ typedef struct Type {
     TYPE_FUNCTION,
     TYPE_STRUCT,
   } tag;
-  size_t index;
+  unsigned long index;
   const char *name;
   struct Type *pointee;
   struct Binding *binding;
@@ -30,8 +30,7 @@ typedef struct Type {
 } Type;
 
 inline static bool type_is_pointer(Type *type) {
-  return type->extensions.length &&
-         type->extensions.data[type->extensions.length - 1] == TYPE_EXT_POINTER;
+  return type->extensions.length && type->extensions.data[type->extensions.length - 1] == TYPE_EXT_POINTER;
 }
 
 inline static bool type_is_pointer_of_depth(Type *type, unsigned depth) {
@@ -48,25 +47,36 @@ inline static bool type_is_pointer_of_depth(Type *type, unsigned depth) {
   return true;
 }
 
-inline static void print_type(Type *type, String_Builder *sb) {
+inline static void print_type_with_length(Type *type, String_Builder *sb, unsigned array_length) {
+  if (!type) {
+    return;
+  }
+
+  if (!type->name) {
+    abort();
+  }
+
   sb_append(sb, type->name ? type->name : "<unnamed>");
   for (size_t i = 0; i < type->extensions.length; ++i) {
     if (type->extensions.data[i] == TYPE_EXT_ARRAY) {
-      sb_append(sb, "[]");
+      if (array_length != 0) {
+        sb_appendf(sb, "[%d]", array_length);
+      } else {
+        sb_append(sb, "[]");
+      }
     } else if (type->extensions.data[i] == TYPE_EXT_POINTER) {
       sb_append(sb, "*");
     }
   }
 }
 
+inline static void print_type(Type *type, String_Builder *sb) { print_type_with_length(type, sb, 0); }
+
 inline static bool type_is_array(Type *type) {
-  return type->extensions.length &&
-         type->extensions.data[type->extensions.length - 1] == TYPE_EXT_ARRAY;
+  return type->extensions.length && type->extensions.data[type->extensions.length - 1] == TYPE_EXT_ARRAY;
 }
 
-inline static bool type_has_extensions(Type *type) {
-  return type->extensions.length;
-}
+inline static bool type_has_extensions(Type *type) { return type->extensions.length; }
 
 typedef Type *Type_Ptr;
 

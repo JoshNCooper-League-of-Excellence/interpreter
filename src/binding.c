@@ -90,13 +90,8 @@ Struct_Type *struct_type_alloc(Context *context, const char *name) {
 }
 
 void context_initialize(Context *context) {
-
-  Type *string_type = type_alloc(context);
-  context->string_type = string_type;
-
   Type *integer_type = type_alloc(context);
   context->integer_type = integer_type;
-
   integer_type->name = "int";
   integer_type->tag = TYPE_INT;
 

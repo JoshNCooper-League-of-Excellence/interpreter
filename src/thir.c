@@ -292,6 +292,30 @@ Thir *type_if(Ast *ast, Context *context) {
   return thir;
 }
 
+Thir *type_while(Ast *ast, Context *context) {
+  Thir *condition = nullptr;
+  if (ast->$while.condition) {
+    condition = type_expression(ast->$while.condition, context);
+  } else {
+    static Thir *true_literal;
+    if (!true_literal) {
+      true_literal = thir_alloc(context, THIR_LITERAL, (Span){});
+      true_literal->literal.value = "true";
+      true_literal->type = context->bool_type;
+    }
+
+    condition = true_literal;
+  }
+
+  Thir *block = type_block(ast->$while.block, context);
+  Thir *loop = thir_alloc(context, THIR_LOOP, ast->span);
+  loop->loop.condition = condition;
+  loop->loop.increment = nullptr;
+  loop->loop.initializer = nullptr;
+  loop->loop.block = block;
+  return loop;
+}
+
 Thir *type_block(Ast *ast, Context *context) {
   Thir *block = thir_alloc(context, THIR_BLOCK, ast->span);
 
@@ -300,6 +324,9 @@ Thir *type_block(Ast *ast, Context *context) {
     switch (statement->tag) {
     case AST_ERROR:
       report_error(statement);
+    case AST_WHILE: 
+      LIST_PUSH(statements, type_while(statement, context));
+      break;
     case AST_IF:
       LIST_PUSH(statements, type_if(statement, context));
       break;

@@ -1,113 +1,94 @@
 EXTERNS:
-  [0]: extern puts(byte*) -> int
-  [1]: extern printf(byte*, void*) -> int
-  [2]: extern strlen(byte*) -> int
-  [3]: extern malloc(int) -> void*
-  [4]: extern free(void*) -> void
-  [5]: extern memcpy(byte*, byte*, int) -> void
+  [0]: extern puts(byte*) int
+  [1]: extern printf(byte*, void*) int
+  [2]: extern strlen(byte*) int
+  [3]: extern malloc(int) void*
+  [4]: extern free(void*) void
+  [5]: extern memcpy(byte*, byte*, int) void
 TYPES:
-  [13]: struct string {
+  [12]: struct string {
           [0]: byte
           [1]: int
         }
 CONSTANTS:
-  [0]: { type: int, value: 0 }
-  [1]: { type: int, value: 100 }
-  [2]: { type: int, value: 2 }
-  [3]: { type: byte*, value: "a[1] = %d\n\0" }
-  [4]: { type: int, value: 1 }
-  [5]: { type: int, value: 10 }
-  [6]: { type: byte*, value: "a[0] = %d\n\0" }
-  [7]: { type: byte*, value: "Hello, World!\0" }
-  [8]: { type: int, value: 1000 }
+  [0]: { type: byte*, value: "ehllow\0" }
+  [1]: { type: int, value: 0 }
+  [2]: { type: int, value: 100 }
+  [3]: { type: int, value: 2 }
+  [4]: { type: byte*, value: "a[1] = %d\n\0" }
+  [5]: { type: int, value: 1 }
+  [6]: { type: int, value: 10 }
+  [7]: { type: byte*, value: "a[0] = %d\n\0" }
+  [8]: { type: byte*, value: "Hello, World!\0" }
   [9]: { type: int, value: 3 }
   [10]: { type: int, value: 4 }
-  [11]: { type: byte*, value: "%p\n\0" }
-  [12]: { type: byte*, value: "Hello, World\0" }
-  [13]: { type: int, value: 12 }
+  [11]: { type: int, value: 12 }
 FUNCTIONS:
-  str:
-    t1 = ALLOCA 13, 0
-    t2 = LOAD 0
+str(0 byte*) string:
+    string t2 = CONST c0
+    STORE 1, t2
+    byte* t3 = ALLOCA 12, 0
+    byte* t4 = LOAD 0
+    MEMBER_STORE t3, 0, t4
+    int t5 = LOAD 0
+    PUSH t5
+    int t6 = CALL_EXTERN 2, 1
+    MEMBER_STORE t3, 1, t6
+    RET t3
+main() void:
+    int[3] t1 = ALLOCA 0, 3
+    int t2 = CONST c1
     MEMBER_STORE t1, 0, t2
-    t3 = LOAD 0
-    PUSH t3
-    t4 = CALL_EXTERN 2, 1
-    MEMBER_STORE t1, 1, t4
-    RET t1
-  main:
-    t1 = ALLOCA 1, 3
-    t2 = CONST c0
-    MEMBER_STORE t1, 0, t2
-    t3 = CONST c1
+    int t3 = CONST c2
     MEMBER_STORE t1, 1, t3
-    t4 = CONST c2
+    int t4 = CONST c3
     MEMBER_STORE t1, 2, t4
     STORE 0, t1
-    t5 = CONST c3
+    byte* t5 = CONST c4
     PUSH t5
-    t6 = LOAD 0
-    t7 = CONST c4
-    t8 = MEMBER_LOAD_INDIRECT t6, t7
+    int[] t6 = LOAD 0
+    int t7 = CONST c5
+    int[] t8 = MEMBER_LOAD_INDIRECT t6, t7
     PUSH t8
-    t9 = CALL_EXTERN 1, 2
-    t10 = CONST c5
-    t11 = LOAD 0
-    t12 = CONST c0
+    int t9 = CALL_EXTERN 1, 2
+    int t10 = CONST c6
+    int[] t11 = LOAD 0
+    int t12 = CONST c1
     MEMBER_STORE_INDIRECT t11, t12, t10
     STORE 0, t11
-    t13 = CONST c6
+    byte* t13 = CONST c7
     PUSH t13
-    t14 = LOAD 0
-    t15 = CONST c0
-    t16 = MEMBER_LOAD_INDIRECT t14, t15
+    int[] t14 = LOAD 0
+    int t15 = CONST c1
+    int[] t16 = MEMBER_LOAD_INDIRECT t14, t15
     PUSH t16
-    t17 = CALL_EXTERN 1, 2
-    t19 = CONST c0
+    int t17 = CALL_EXTERN 1, 2
+    int t19 = CONST c1
     STORE 18, t19
-    t21 = CONST c7
+    byte* t21 = CONST c8
     PUSH t21
-    t22 = CALL 0, 1
+    string t22 = CALL 0, 1
     STORE 20, t22
-    t24 = CONST c8
-    PUSH t24
-    t25 = CALL_EXTERN 3, 1
-    STORE 23, t25
-    t27 = ALLOCA 1, 5
-    t28 = CONST c0
-    MEMBER_STORE t27, 0, t28
-    t29 = CONST c4
-    MEMBER_STORE t27, 1, t29
-    t30 = CONST c2
-    MEMBER_STORE t27, 2, t30
-    t31 = CONST c9
-    MEMBER_STORE t27, 3, t31
-    t32 = CONST c10
-    MEMBER_STORE t27, 4, t32
-    STORE 26, t27
-    t33 = CONST c11
-    PUSH t33
-    t34 = LOAD 23
-    PUSH t34
-    t35 = CALL_EXTERN 1, 2
-    t36 = LOAD 23
-    PUSH t36
-    t37 = CONST c12
-    PUSH t37
-    t38 = CONST c1
-    PUSH t38
-    t39 = CALL_EXTERN 5, 3
-    t40 = LOAD 20
-    t41 = MEMBER_LOAD t40, 1
-    t42 = CONST c13
-    t43 = GREATER t41, t42
-    JUMP_IF t43, 1
+    int[5] t24 = ALLOCA 0, 5
+    int t25 = CONST c1
+    MEMBER_STORE t24, 0, t25
+    int t26 = CONST c5
+    MEMBER_STORE t24, 1, t26
+    int t27 = CONST c3
+    MEMBER_STORE t24, 2, t27
+    int t28 = CONST c9
+    MEMBER_STORE t24, 3, t28
+    int t29 = CONST c10
+    MEMBER_STORE t24, 4, t29
+    STORE 23, t24
+    string t30 = LOAD 20
+    int t31 = MEMBER_LOAD t30, 1
+    int t32 = CONST c11
+    bool t33 = GREATER t31, t32
+    JUMP_IF t33, 1
     JUMP 4
-    t44 = LOAD 20
-    t45 = MEMBER_LOAD t44, 0
-    PUSH t45
-    t46 = CALL_EXTERN 0, 1
-    t47 = LOAD 23
-    PUSH t47
-    t48 = CALL_EXTERN 4, 1
+    string t34 = LOAD 20
+    byte* t35 = MEMBER_LOAD t34, 0
+    PUSH t35
+    int t36 = CALL_EXTERN 0, 1
     RET t0

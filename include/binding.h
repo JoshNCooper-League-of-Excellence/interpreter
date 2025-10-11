@@ -17,7 +17,7 @@ DEFINE_LIST(Ast_Ptr);
 
 typedef struct Binding {
   const char *name;
-  size_t index;
+  unsigned index;
   Type *type;
   Ast_Ptr ast;
   Thir_Ptr thir;
@@ -37,7 +37,7 @@ typedef struct {
   Type_Ptr_list type_table;
   Binding_Ptr_list bindings;
 
-  size_t variables, functions;
+  unsigned variables, functions;
 
   Ast_Ptr_list ast_list;
   Thir_Ptr_list thir_list;

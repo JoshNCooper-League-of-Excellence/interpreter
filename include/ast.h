@@ -168,7 +168,7 @@ typedef enum {
   AST_BINARY,
   AST_AGGREGATE_INITIALIZER,
   AST_MEMBER_ACCESS,
-  
+
   AST_BLOCK,
   AST_RETURN,
   AST_VARIABLE,
@@ -177,6 +177,7 @@ typedef enum {
   AST_TYPE,
   AST_STRUCT,
   AST_IF,
+  AST_WHILE,
 } Ast_Tag;
 
 typedef struct {
@@ -219,6 +220,11 @@ typedef struct Ast {
       struct Ast *then_block;
       struct Ast *else_block; // optional
     } $if;
+
+    struct {
+      struct Ast *condition; // optional
+      struct Ast *block;
+    } $while;
 
     struct {
       struct Ast *base;
@@ -296,15 +302,12 @@ static inline void print_indent(String_Builder *sb, int indent) {
     sb_append(sb, "  ");
   }
 }
-static const char *ast_tag_names[] = {"ERROR",   "PROGRAM",
-                                      "LITERAL", "IDENTIFIER",
-                                      "BLOCK",   "FUNCTION",
-                                      "UNARY",   "BINARY",
-                                      "RETURN",  "VARIABLE",
-                                      "CALL",    "EXTERN",
-                                      "TYPE",    "AGGREGATE_INITIALIZER",
-                                      "STRUCT",  "MEMBER_ACCESS",
-                                      "IF"};
+
+static const char *ast_tag_names[] = {
+  "ERROR", "PROGRAM", "LITERAL", "IDENTIFIER", "FUNCTION", "UNARY", "BINARY",
+  "AGGREGATE_INITIALIZER", "MEMBER_ACCESS", "BLOCK", "RETURN", "VARIABLE",
+  "CALL", "EXTERN", "TYPE", "STRUCT", "IF", "WHILE"
+};
 
 static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   if (!node) {
@@ -315,9 +318,15 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   print_indent(sb, indent);
   sb_append(sb, ast_tag_names[node->tag]);
   sb_append(sb, "\n");
-
   switch (node->tag) {
-
+  case AST_WHILE:
+    print_indent(sb, indent + 1);
+    sb_append(sb, "condition:\n");
+    print_ast_rec(node->$while.condition, sb, indent + 2);
+    print_indent(sb, indent + 1);
+    sb_append(sb, "block:\n");
+    print_ast_rec(node->$while.block, sb, indent + 2);
+    break;
   case AST_IF:
     print_indent(sb, indent + 1);
     sb_append(sb, "condition:\n");
@@ -360,8 +369,7 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
     sb_append(sb, "values:\n");
     for (size_t i = 0; i < node->aggregate_initializer.values.length; ++i) {
       print_indent(sb, indent + 2);
-      if (node->aggregate_initializer.keys.data &&
-          i < node->aggregate_initializer.keys.length &&
+      if (node->aggregate_initializer.keys.data && i < node->aggregate_initializer.keys.length &&
           node->aggregate_initializer.keys.data[i]) {
         sb_append(sb, "key: ");
         sb_append(sb, node->aggregate_initializer.keys.data[i]);
@@ -428,8 +436,7 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
     sb_append(sb, "\n");
     print_indent(sb, indent + 1);
     sb_append(sb, "type: ");
-    sb_append(sb,
-              node->literal.tag == AST_LITERAL_STRING ? "STRING" : "INTEGER");
+    sb_append(sb, node->literal.tag == AST_LITERAL_STRING ? "STRING" : "INTEGER");
     sb_append(sb, "\n");
     break;
   case AST_IDENTIFIER:
@@ -519,22 +526,20 @@ static inline void print_ast_rec(Ast *node, String_Builder *sb, int indent) {
   }
 }
 
-static inline void print_ast(Ast *ast, String_Builder *sb) {
-  print_ast_rec(ast, sb, 0);
-}
+static inline void print_ast(Ast *ast, String_Builder *sb) { print_ast_rec(ast, sb, 0); }
 
 // used to maintain homogenous aggregate initializers, only key values, or only
 // values. no mixing the kinds
-#define AGGREGATE_INITIALIZER_SET_CHECK_PARSING_KEY_VALUES(parsing_flag)       \
-  do {                                                                         \
-    if (!set) {                                                                \
-      parsing_only_values = (parsing_flag);                                    \
-      set = true;                                                              \
-    } else if ((parsing_only_values) != (parsing_flag)) {                      \
-      return parser_error(context, span,                                       \
-                          "aggregate initializers can only contain all "       \
-                          "values, or all key-value pairs.");                  \
-    }                                                                          \
+#define AGGREGATE_INITIALIZER_SET_CHECK_PARSING_KEY_VALUES(parsing_flag)                                                    \
+  do {                                                                                                                      \
+    if (!set) {                                                                                                             \
+      parsing_only_values = (parsing_flag);                                                                                 \
+      set = true;                                                                                                           \
+    } else if ((parsing_only_values) != (parsing_flag)) {                                                                   \
+      return parser_error(context, span,                                                                                    \
+                          "aggregate initializers can only contain all "                                                    \
+                          "values, or all key-value pairs.");                                                               \
+    }                                                                                                                       \
   } while (0)
 
 #endif

@@ -8,6 +8,7 @@ extern memcpy :: (byte*, byte*, int) void;
 struct string { data byte*, length int }
 
 str :: (data byte*) string {
+  varyu byte* = "ehllow";
   return { data, strlen(data) };
 }
 
@@ -20,19 +21,9 @@ main :: () void {
 
   x int = 0;
   s string = str("Hello, World!");
-  
-  // puts(s.data);
-
-  p void* = malloc(1000);
 
   ab int[] = {0, 1, 2, 3, 4};
-
-  printf("%p\n", p);
-  memcpy(p, "Hello, World", 100);
-  
   if s.length > 12 {
     puts(s.data);
   }
-
-  free(p);
 }

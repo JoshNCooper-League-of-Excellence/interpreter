@@ -4,7 +4,6 @@
 #include "list.h"
 #include "thir.h"
 #include "type.h"
-#include <stdlib.h>
 
 typedef enum {
   OP_CONST,
@@ -47,13 +46,13 @@ typedef enum {
 
 typedef struct {
   Op_Code op;
-  signed long long a, b, c;
+  signed a, b, c;
 } Instr;
 
 typedef struct {
   Instr *data;
-  unsigned int length;
-  unsigned int capacity;
+  unsigned length;
+  unsigned capacity;
 } Instr_Buffer;
 
 typedef enum {
@@ -77,22 +76,30 @@ typedef struct {
 
 typedef struct {
   Constant *data;
-  unsigned int length;
-  unsigned int capacity;
+  unsigned length;
+  unsigned capacity;
 } Constant_Buffer;
 
 typedef struct {
   const char *name;
+  Function_Type *type;
+  
   Instr_Buffer code;
   unsigned n_locals;
-  size_t param_count;
-  size_t const_start;
+  unsigned param_count;
+  unsigned const_start;
+
+  struct {
+    int *data;
+    unsigned length, capacity;
+  } local_types;
+
 } Function;
 
 typedef struct {
   Function **data;
-  unsigned int length;
-  unsigned int capacity;
+  unsigned length;
+  unsigned capacity;
 } Function_Buffer;
 
 typedef struct {
@@ -187,7 +194,7 @@ void module_init(Module *m, Context *context);
 
 #define EMIT_JUMP(buf, target) EMIT(buf, MAKE_INSTR1(OP_JUMP, (target)))
 
-int lower_expression(Thir *n, Function *fn, Module *m);
+unsigned lower_expression(Thir *n, Function *fn, Module *m);
 void lower_block(Thir *block, Function *fn, Module *m);
 void lower_program(Thir *program, Module *m);
 void lower_function(Thir *node, Module *m);
