@@ -1,9 +1,10 @@
 /* 
   todo:
-
+  
   [x] arena allocators 
   [/] typed operands for ir (*we have some type information, but needs to be more like LLVM's -- type encoded operands for every instr*)
-  
+  [] add modules and importing
+
   [] scope (non existent, we just use global bindings)
   [] fix ownership of alloca's: when we return a struct literal it gets destroyed on return.
   
@@ -20,20 +21,6 @@
     [] add 'extern \"library name\" { ... group of functions ... }' syntax.
 */
 
-extern puts :: (byte*) int;
-extern printf :: (byte*, void*) int;
-extern strlen :: (byte*) int;
-extern malloc :: (int) void*;
-extern free :: (void*) void;
-extern memcpy :: (byte*, byte*, int) void;
-
-struct string { data byte*, length int }
-
-str :: (data byte*) string {
-  varyu byte* = "ehllow";
-  return { data, strlen(data) };
-}
-
 main :: () void {
   a int[] = {0, 100, 2};
   printf("a[1] = %d\n", a[1]);
@@ -49,3 +36,16 @@ main :: () void {
     puts(s.data);
   }
 }
+
+str :: (data byte*) string {
+  return { data, strlen(data) };
+}
+
+struct string { data byte*, length int }
+
+extern printf :: (byte*, void*) int;
+extern puts :: (byte*) int;
+extern strlen :: (byte*) int;
+extern malloc :: (int) void*;
+extern free :: (void*) void;
+extern memcpy :: (byte*, byte*, int) void;

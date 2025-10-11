@@ -118,3 +118,63 @@ void context_initialize(Context *context) {
   bool_type->name = "bool";
   bool_type->tag = TYPE_BOOL;
 }
+
+Binding *get_binding(const char *identifier, Context *context) {
+  if (!identifier) {
+    fprintf(stderr, "error: null identifier in get_binding()\n");
+    exit(1);
+  }
+
+  LIST_FOREACH(context->ast_list, ast) {
+    if (!ast->binding) {
+      continue;
+    }
+    if (ast->tag == AST_VARIABLE) {
+      if (strcmp(ast->variable.name, identifier) == 0) {
+        return ast->binding;
+      }
+    } else if (ast->tag == AST_FUNCTION) {
+      if (strcmp(ast->function.name, identifier) == 0) {
+        return ast->binding;
+      }
+    }
+  }
+
+  LIST_FOREACH(context->thir_list, thir) {
+    if (!thir->binding) {
+      continue;
+    }
+
+    switch (thir->tag) {
+    case THIR_VARIABLE:
+      if (strcmp(thir->binding->name, identifier) == 0) {
+        return thir->binding;
+      }
+      break;
+    case THIR_FUNCTION:
+      if (strcmp(thir->function.name, identifier) == 0) {
+        return thir->binding;
+      }
+      break;
+    case THIR_EXTERN:
+      if (strcmp(thir->extern_function.name, identifier) == 0) {
+        return thir->binding;
+      }
+      break;
+      break;
+    default:
+      break;
+    }
+  }
+
+  LIST_FOREACH(context->type_table, type) {
+    if (!type->binding) {
+      continue;
+    }
+    if (strcmp(type->name, identifier) == 0) {
+      return type->binding;
+    }
+  }
+
+  return nullptr;
+}

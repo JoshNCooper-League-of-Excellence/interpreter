@@ -121,6 +121,8 @@ typedef struct Thir {
   };
 } Thir;
 
+const char *get_function_type_string(Type_Ptr_list arguments, Type *return_type);
+
 Thir *type_program(struct Ast *, Context *context);
 Thir *type_literal(struct Ast *, Context *context);
 Thir *type_call(struct Ast *, Context *context);
@@ -129,7 +131,6 @@ Thir *type_identifier(struct Ast *, Context *context);
 Thir *type_block(struct Ast *, Context *context);
 Thir *type_function(struct Ast *, Context *context);
 Thir *type_extern(struct Ast *, Context *context);
-void type_struct(struct Ast *, Context *context);
 Thir *type_unary(struct Ast *, Context *context);
 Thir *type_binary(struct Ast *, Context *context);
 Thir *type_aggregate_initializer(struct Ast *, Context *context);
@@ -137,5 +138,25 @@ Thir *type_return(struct Ast *, Context *context);
 Thir *type_variable(struct Ast *, Context *context);
 Type *get_type_from_ast_type(struct Ast *, Context *context);
 
+[[noreturn]]
+static inline void report_error(Ast *error) {
+  if (error && error->tag == AST_ERROR) {
+    const char *source_range = lexer_span_to_string(error->span);
+    fprintf(stderr, "Error at span %s: '%s'\n", source_range, error->error.message ? error->error.message : "Unknown error");
+  }
+  exit(1);
+}
+
+[[noreturn]]
+static inline void use_of_undeclared(const char *kind, const char *identifier, Span span) {
+  char *span_string = lexer_span_to_string(span);
+  fprintf(stderr, "use of undeclared %s '%s' at: %s", kind, identifier, span_string);
+  exit(1);
+}
+
+Binding_Ptr_list convert_ast_parameters_to_thir_parameters(Context *context, Parameter_list parameters, Span span,
+                                                           Type_Ptr_list *argument_types);
+                                                           
+Type_Ptr_list collect_parameter_types(Parameter_list params, Span span, Context *ctx);
 
 #endif

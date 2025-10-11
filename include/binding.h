@@ -94,5 +94,6 @@ Binding_Ptr bind_variable(Context *context, Binding binding);
 Binding_Ptr bind_function(Context *context, Binding binding, bool is_extern);
 
 void context_initialize(Context *context);
+Binding *get_binding(const char *identifier, Context *context);
 
 #endif

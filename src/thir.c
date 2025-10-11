@@ -11,149 +11,85 @@
 #include <stdio.h>
 #include <stdnoreturn.h>
 
-const char *get_function_type_string(Type_Ptr_list arguments, Type *return_type) {
-  String_Builder sb = {0};
-  sb_append(&sb, "function :: (");
-  LIST_FOREACH(arguments, arg) {
-    sb_append(&sb, arg->name);
-    if (__i != arguments.length - 1) {
-      sb_append(&sb, ", ");
-    }
-  }
-  sb_appendf(&sb, ") %s;", return_type->name);
-  return sb.value;
-}
-
-[[noreturn]]
-void use_of_undeclared(const char *kind, const char *identifier, Span span) {
-  char *span_string = lexer_span_to_string(span);
-  fprintf(stderr, "use of undeclared %s '%s' at: %s", kind, identifier, span_string);
-  exit(1);
-}
-
-Binding *get_binding(const char *identifier, Context *context);
-
-Binding_Ptr_list typer_convert_parameters(Context *context, Parameter_list parameters, Span span,
-                                          Type_Ptr_list *argument_types) {
-  Binding_Ptr_list bindings = {0};
-  LIST_FOREACH(parameters, param) {
-    Thir_Ptr thir_param = thir_alloc(context, THIR_VARIABLE, span);
-    Type *param_type = get_type_from_ast_type(param.type, context);
-
-    if (!param_type) {
-      fprintf(stderr, "use of undeclared type for parameter '%s' at: %s\n",
-              param.nameless ? "<nameless parameter>" : param.name,
-              lexer_span_to_string(span));
-      exit(1);
-    }
-
-    Binding binding = {.thir = thir_param,
-                       .ast = nullptr,
-                       .name = param.nameless ? "<nameless parameter>" : param.name,
-                       .type = param_type};
-
-    Binding_Ptr ptr = bind_variable(context, binding);
-    thir_param->binding = ptr;
-    thir_param->type = param_type;
-
-    LIST_PTR_PUSH(argument_types, param_type);
-    LIST_PUSH(bindings, ptr);
-  }
-
-  return bindings;
-}
-
-Binding *get_binding(const char *identifier, Context *context) {
-  if (!identifier) {
-    fprintf(stderr, "error: null identifier in get_binding()\n");
-    exit(1);
-  }
-
-  LIST_FOREACH(context->ast_list, ast) {
-    if (!ast->binding) {
-      continue;
-    }
-    if (ast->tag == AST_VARIABLE) {
-      if (strcmp(ast->variable.name, identifier) == 0) {
-        return ast->binding;
-      }
-    } else if (ast->tag == AST_FUNCTION) {
-      if (strcmp(ast->function.name, identifier) == 0) {
-        return ast->binding;
+Thir *type_program(Ast *ast, Context *c) {
+  LIST_FOREACH(ast->program, stmt) {
+    if (stmt->tag == AST_ERROR) {
+      report_error(stmt);
+    } else if (stmt->tag == AST_STRUCT) {
+      Type *unused;
+      if (!try_find_type(c, stmt->$struct.name, &unused)) {
+        (void)struct_type_alloc(c, stmt->$struct.name);
       }
     }
   }
 
-  LIST_FOREACH(context->thir_list, thir) {
-    if (!thir->binding) {
-      continue;
-    }
-
-    switch (thir->tag) {
-    case THIR_VARIABLE:
-      if (strcmp(thir->binding->name, identifier) == 0) {
-        return thir->binding;
+  LIST_FOREACH(ast->program, stmt) {
+    switch (stmt->tag) {
+    case AST_EXTERN: {
+      Type_Ptr_list arg_types = collect_parameter_types(stmt->extern_function.parameters, stmt->span, c);
+      Type *ret = get_type_from_ast_type(stmt->extern_function.return_type, c);
+      Function_Type *fty;
+      if (!try_find_function_type(c, arg_types, ret, &fty)) {
+        fty = function_type_alloc(c);
+        fty->base.name = get_function_type_string(arg_types, ret);
+        fty->parameters = arg_types;
+        fty->returns = ret;
       }
-      break;
-    case THIR_FUNCTION:
-      if (strcmp(thir->function.name, identifier) == 0) {
-        return thir->binding;
+      Binding b = (Binding){0};
+      b.ast = stmt;
+      b.name = stmt->extern_function.name;
+      b.type = (Type *)fty;
+      bind_function(c, b, true);
+    } break;
+    case AST_FUNCTION: {
+      Type_Ptr_list arg_types = collect_parameter_types(stmt->function.parameters, stmt->span, c);
+      Type *ret = get_type_from_ast_type(stmt->function.return_type, c);
+      Function_Type *fty;
+      if (!try_find_function_type(c, arg_types, ret, &fty)) {
+        fty = function_type_alloc(c);
+        fty->base.name = get_function_type_string(arg_types, ret);
+        fty->parameters = arg_types;
+        fty->returns = ret;
       }
-      break;
-    case THIR_EXTERN:
-      if (strcmp(thir->extern_function.name, identifier) == 0) {
-        return thir->binding;
-      }
-      break;
-      break;
+      Binding b = (Binding){0};
+      b.ast = stmt;
+      b.name = stmt->function.name;
+      b.type = (Type *)fty;
+      bind_function(c, b, false);
+    } break;
     default:
       break;
     }
   }
 
-  LIST_FOREACH(context->type_table, type) {
-    if (!type->binding) {
-      continue;
-    }
-    if (strcmp(type->name, identifier) == 0) {
-      return type->binding;
+  LIST_FOREACH(ast->program, stmt) {
+    if (stmt->tag == AST_STRUCT) {
+      Type *exists;
+      if (try_find_type(c, stmt->$struct.name, &exists)) {
+        Struct_Type *st = (Struct_Type *)exists;
+        st->members.length = 0;
+        LIST_FOREACH(stmt->$struct.members, m) {
+          Struct_Member sm = {.name = m.name, .type = get_type_from_ast_type(m.type, c)};
+          LIST_PUSH(st->members, sm);
+        }
+      }
     }
   }
 
-  return nullptr;
-}
-
-[[noreturn]]
-void report_error(Ast *error) {
-  if (error && error->tag == AST_ERROR) {
-    const char *source_range = lexer_span_to_string(error->span);
-    fprintf(stderr, "Error at span %s: '%s'\n", source_range, error->error.message ? error->error.message : "Unknown error");
-  }
-  exit(1);
-}
-
-Thir *type_program(Ast *ast, Context *context) {
-  Thir *program = thir_alloc(context, THIR_PROGRAM, ast->span);
+  Thir *program = thir_alloc(c, THIR_PROGRAM, ast->span);
   Thir_Ptr_list statements = {0};
 
-  LIST_FOREACH(ast->program, statement) {
-    switch (statement->tag) {
-    case AST_ERROR:
-      report_error(statement);
-      break;
-    case AST_STRUCT: {
-      type_struct(statement, context);
-    } break;
-    case AST_EXTERN: {
-      Thir *thir = type_extern(statement, context);
-      LIST_PUSH(statements, thir);
-    } break;
-    case AST_FUNCTION:
-      Thir *thir = type_function(statement, context);
-      LIST_PUSH(statements, thir);
-      break;
-    default:
-      break;
+  LIST_FOREACH(ast->program, stmt) {
+    if (stmt->tag == AST_EXTERN) {
+      Thir *e = type_extern(stmt, c);
+      LIST_PUSH(statements, e);
+    }
+  }
+
+  LIST_FOREACH(ast->program, stmt) {
+    if (stmt->tag == AST_FUNCTION) {
+      Thir *f = type_function(stmt, c);
+      LIST_PUSH(statements, f);
     }
   }
 
@@ -161,112 +97,129 @@ Thir *type_program(Ast *ast, Context *context) {
   return program;
 }
 
-Thir *type_extern(Ast *ast, Context *context) {
-  Thir *$extern = thir_alloc(context, THIR_EXTERN, ast->span);
+Thir *type_function(Ast *ast, Context *c) {
+  Binding *existing = get_binding(ast->function.name, c);
+  if (existing && existing->thir)
+    return existing->thir;
 
-  const char *name = ast->extern_function.name;
-  $extern->extern_function.name = name;
+  Thir *thir = thir_alloc(c, THIR_FUNCTION, ast->span);
+  thir->function.name = ast->function.name;
 
   Type_Ptr_list argument_types = {0};
-  $extern->extern_function.parameters =
-      typer_convert_parameters(context, ast->extern_function.parameters, ast->span, &argument_types);
+  thir->function.parameters =
+      convert_ast_parameters_to_thir_parameters(c, ast->function.parameters, ast->span, &argument_types);
 
-  Type *return_type = get_type_from_ast_type(ast->extern_function.return_type, context);
+  Type *return_type = get_type_from_ast_type(ast->function.return_type, c);
+  if (!return_type) {
+    fprintf(stderr, "use of undeclared type as return type: '%s' at %s\n", ast->function.return_type->type.path,
+            lexer_span_to_string(ast->span));
+    exit(1);
+  }
 
+  // Prefer the function type from the existing binding if available
+  Function_Type *fty = NULL;
+  if (existing && existing->type) {
+    fty = (Function_Type *)existing->type;
+  } else {
+    if (!try_find_function_type(c, argument_types, return_type, &fty)) {
+      fty = function_type_alloc(c);
+      fty->base.name = get_function_type_string(argument_types, return_type);
+      fty->parameters = argument_types;
+      fty->returns = return_type;
+    }
+  }
+
+  thir->function.return_type = return_type;
+  c->typer_expected_type = thir->function.return_type;
+  thir->function.block = type_block(ast->function.block, c);
+  c->typer_expected_type = nullptr;
+
+  thir->type = (Type *)fty;
+
+  // Fulfill binding instead of rebinding
+  if (existing) {
+    existing->thir = thir;
+    existing->type = (Type *)fty;
+    existing->ast = ast;
+  } else {
+    Binding b = {0};
+    b.ast = ast;
+    b.thir = thir;
+    b.name = ast->function.name;
+    b.type = (Type *)fty;
+    bind_function(c, b, false);
+  }
+
+  return thir;
+}
+
+Thir *type_extern(Ast *ast, Context *c) {
+  Binding *existing = get_binding(ast->extern_function.name, c);
+  if (existing && existing->thir) {
+    return existing->thir;
+  }
+
+  Thir *thir = thir_alloc(c, THIR_EXTERN, ast->span);
+
+  const char *name = ast->extern_function.name;
+  thir->extern_function.name = name;
+
+  Type_Ptr_list argument_types = collect_parameter_types(ast->extern_function.parameters, ast->span, c);
+  thir->extern_function.parameters = (Binding_Ptr_list){0};
+
+  Type *return_type = get_type_from_ast_type(ast->extern_function.return_type, c);
   if (!return_type) {
     fprintf(stderr, "use of undeclared type as return type: '%s' at %s\n", ast->extern_function.return_type->type.path,
             lexer_span_to_string(ast->span));
     exit(1);
   }
+  thir->extern_function.return_type = return_type;
 
-  $extern->extern_function.return_type = return_type;
+  Function_Type *fty = NULL;
+  if (!try_find_function_type(c, argument_types, return_type, &fty)) {
+    fty = function_type_alloc(c);
+    fty->base.name = get_function_type_string(argument_types, return_type);
+    fty->parameters = argument_types;
+    fty->returns = return_type;
+  }
+  thir->type = (Type *)fty;
 
-  Function_Type *type = function_type_alloc(context);
-  type->base.name = get_function_type_string(argument_types, return_type);
-  type->parameters = argument_types;
-  type->returns = return_type;
+  Binding b = {0};
+  b.ast = ast;
+  b.thir = thir;
+  b.name = name;
+  b.type = (Type *)fty;
+  bind_function(c, b, true);
 
-  $extern->type = (Type *)type;
-  Binding binding = {0};
-  binding.ast = ast;
-  binding.thir = $extern;
-  binding.name = name;
-  binding.type = (Type *)type;
-  bind_function(context, binding, true);
+  Extern_Function ffi_function = get_ffi_function_from_thir(thir);
+  thir->extern_function.index = ffi_function.index;
 
-  Extern_Function ffi_function = get_ffi_function_from_thir($extern);
-  $extern->extern_function.index = ffi_function.index;
-
-  return $extern;
+  return thir;
 }
 
-Thir *type_function(Ast *ast, Context *context) {
-  Thir *function = thir_alloc(context, THIR_FUNCTION, ast->span);
-  typeof(ast->function) ast_fn = ast->function;
-  typeof(function->function) *thir_fn = &function->function;
-
-  thir_fn->name = ast->function.name;
-
-  Type_Ptr_list argument_types = {0};
-  thir_fn->parameters = typer_convert_parameters(context, ast_fn.parameters, ast->span, &argument_types);
-
-  Type *return_type = get_type_from_ast_type(ast_fn.return_type, context);
-
-  if (!return_type) {
-    fprintf(stderr, "use of undeclared type as return type: '%s' at %s\n", ast_fn.return_type->type.path,
-            lexer_span_to_string(ast->span));
-    exit(1);
-  }
-
-  thir_fn->return_type = return_type;
-  context->typer_expected_type = thir_fn->return_type;
-  thir_fn->block = type_block(ast_fn.block, context);
-  context->typer_expected_type = nullptr;
-
-  Function_Type *type;
-
-  if (!try_find_function_type(context, argument_types, return_type, &type)) {
-    type = function_type_alloc(context);
-    type->base.name = get_function_type_string(argument_types, return_type);
-    type->parameters = argument_types;
-    type->returns = return_type;
-  }
-
-  function->type = (Type *)type;
-  Binding binding = {0};
-  binding.ast = ast;
-  binding.thir = function;
-  binding.name = ast->function.name;
-  binding.type = (Type *)type;
-
-  bind_function(context, binding, false);
-
-  return function;
-}
-
-Thir *type_literal(Ast *ast, Context *context) {
-  Thir *literal = thir_alloc(context, THIR_LITERAL, ast->span);
+Thir *type_literal(Ast *ast, Context *c) {
+  Thir *literal = thir_alloc(c, THIR_LITERAL, ast->span);
 
   switch (ast->literal.tag) {
   case AST_LITERAL_INTEGER:
     literal->literal.value = ast->literal.value;
-    literal->type = context->integer_type;
+    literal->type = c->integer_type;
     break;
   case AST_LITERAL_STRING:
     literal->literal.value = ast->literal.value;
-    literal->type = context->string_type;
+    literal->type = c->string_type;
     break;
   case AST_LITERAL_BOOL:
     literal->literal.value = ast->literal.value;
-    literal->type = context->bool_type;
+    literal->type = c->bool_type;
     break;
   }
 
   return literal;
 }
 
-Thir *type_identifier(Ast *ast, Context *context) {
-  Binding *binding = get_binding(ast->identifier, context);
+Thir *type_identifier(Ast *ast, Context *c) {
+  Binding *binding = get_binding(ast->identifier, c);
 
   if (!binding) {
     use_of_undeclared("identifier", ast->identifier, ast->span);
@@ -275,41 +228,41 @@ Thir *type_identifier(Ast *ast, Context *context) {
   return binding->thir;
 }
 
-Thir *type_if(Ast *ast, Context *context) {
-  Thir *condition = type_expression(ast->$if.condition, context);
-  Thir *then_block = type_block(ast->$if.then_block, context);
+Thir *type_if(Ast *ast, Context *c) {
+  Thir *condition = type_expression(ast->$if.condition, c);
+  Thir *then_block = type_block(ast->$if.then_block, c);
   Thir *else_block = nullptr;
   if (ast->$if.else_block) {
     if (ast->$if.else_block->tag == AST_IF) {
-      else_block = type_if(ast->$if.else_block, context);
+      else_block = type_if(ast->$if.else_block, c);
     } else {
-      else_block = type_block(ast->$if.else_block, context);
+      else_block = type_block(ast->$if.else_block, c);
     }
   }
-  Thir *thir = thir_alloc(context, THIR_IF, ast->span);
+  Thir *thir = thir_alloc(c, THIR_IF, ast->span);
   thir->$if.condition = condition;
   thir->$if.else_block = else_block;
   thir->$if.then_block = then_block;
   return thir;
 }
 
-Thir *type_while(Ast *ast, Context *context) {
+Thir *type_while(Ast *ast, Context *c) {
   Thir *condition = nullptr;
   if (ast->$while.condition) {
-    condition = type_expression(ast->$while.condition, context);
+    condition = type_expression(ast->$while.condition, c);
   } else {
     static Thir *true_literal;
     if (!true_literal) {
-      true_literal = thir_alloc(context, THIR_LITERAL, (Span){});
+      true_literal = thir_alloc(c, THIR_LITERAL, (Span){});
       true_literal->literal.value = "true";
-      true_literal->type = context->bool_type;
+      true_literal->type = c->bool_type;
     }
 
     condition = true_literal;
   }
 
-  Thir *block = type_block(ast->$while.block, context);
-  Thir *loop = thir_alloc(context, THIR_LOOP, ast->span);
+  Thir *block = type_block(ast->$while.block, c);
+  Thir *loop = thir_alloc(c, THIR_LOOP, ast->span);
   loop->loop.condition = condition;
   loop->loop.increment = nullptr;
   loop->loop.initializer = nullptr;
@@ -317,34 +270,34 @@ Thir *type_while(Ast *ast, Context *context) {
   return loop;
 }
 
-Thir *type_block(Ast *ast, Context *context) {
-  Thir *block = thir_alloc(context, THIR_BLOCK, ast->span);
+Thir *type_block(Ast *ast, Context *c) {
+  Thir *block = thir_alloc(c, THIR_BLOCK, ast->span);
 
   Thir_Ptr_list statements = {0};
   LIST_FOREACH(ast->block, statement) {
     switch (statement->tag) {
     case AST_ERROR:
       report_error(statement);
-    case AST_WHILE: 
-      LIST_PUSH(statements, type_while(statement, context));
+    case AST_WHILE:
+      LIST_PUSH(statements, type_while(statement, c));
       break;
     case AST_IF:
-      LIST_PUSH(statements, type_if(statement, context));
+      LIST_PUSH(statements, type_if(statement, c));
       break;
     case AST_CALL:
-      LIST_PUSH(statements, type_call(statement, context));
+      LIST_PUSH(statements, type_call(statement, c));
       break;
     case AST_UNARY:
-      LIST_PUSH(statements, type_unary(statement, context));
+      LIST_PUSH(statements, type_unary(statement, c));
       break;
     case AST_BINARY:
-      LIST_PUSH(statements, type_binary(statement, context));
+      LIST_PUSH(statements, type_binary(statement, c));
       break;
     case AST_RETURN:
-      LIST_PUSH(statements, type_return(statement, context));
+      LIST_PUSH(statements, type_return(statement, c));
       break;
     case AST_VARIABLE:
-      LIST_PUSH(statements, type_variable(statement, context));
+      LIST_PUSH(statements, type_variable(statement, c));
       break;
     default:
       fprintf(stderr, "unexpected statement type in block: %d at: %s\n", statement->tag, lexer_span_to_string(ast->span));
@@ -356,12 +309,12 @@ Thir *type_block(Ast *ast, Context *context) {
   return block;
 }
 
-Thir *type_expression(Ast *ast, Context *context) {
+Thir *type_expression(Ast *ast, Context *c) {
   switch (ast->tag) {
   case AST_MEMBER_ACCESS: {
-    Thir *base = type_expression(ast->member_access.base, context);
+    Thir *base = type_expression(ast->member_access.base, c);
 
-    Thir *thir = thir_alloc(context, THIR_MEMBER_ACCESS, ast->span);
+    Thir *thir = thir_alloc(c, THIR_MEMBER_ACCESS, ast->span);
     thir->member_access.base = base;
     Type *base_type = base->type;
 
@@ -391,26 +344,26 @@ Thir *type_expression(Ast *ast, Context *context) {
     return thir;
   } break;
   case AST_AGGREGATE_INITIALIZER:
-    return type_aggregate_initializer(ast, context);
+    return type_aggregate_initializer(ast, c);
   case AST_CALL:
-    return type_call(ast, context);
+    return type_call(ast, c);
   case AST_LITERAL:
-    return type_literal(ast, context);
+    return type_literal(ast, c);
   case AST_IDENTIFIER:
-    return type_identifier(ast, context);
+    return type_identifier(ast, c);
   case AST_UNARY:
-    return type_unary(ast, context);
+    return type_unary(ast, c);
   case AST_BINARY:
-    return type_binary(ast, context);
+    return type_binary(ast, c);
   default:
     fprintf(stderr, "unexpected expression node type: %d, at %s\n", ast->tag, lexer_span_to_string(ast->span));
     exit(1);
   }
 }
 
-Thir *type_unary(Ast *ast, Context *context) {
-  Thir *unary = thir_alloc(context, THIR_UNARY, ast->span);
-  Thir *operand = type_expression(ast->unary.operand, context);
+Thir *type_unary(Ast *ast, Context *c) {
+  Thir *unary = thir_alloc(c, THIR_UNARY, ast->span);
+  Thir *operand = type_expression(ast->unary.operand, c);
 
   unary->unary.op = ast->unary.op;
   unary->unary.operand = operand;
@@ -418,11 +371,11 @@ Thir *type_unary(Ast *ast, Context *context) {
   return unary;
 }
 
-Thir *type_binary(Ast *ast, Context *context) {
-  Thir *binary = thir_alloc(context, THIR_BINARY, ast->span);
+Thir *type_binary(Ast *ast, Context *c) {
+  Thir *binary = thir_alloc(c, THIR_BINARY, ast->span);
 
-  Thir *left = type_expression(ast->binary.left, context);
-  Thir *right = type_expression(ast->binary.right, context);
+  Thir *left = type_expression(ast->binary.left, c);
+  Thir *right = type_expression(ast->binary.right, c);
 
   if (ast->binary.op == OPERATOR_NONE) {
     fprintf(stderr, "invalid binary operator: OPERATOR_NONE at %s\n", lexer_span_to_string(ast->span));
@@ -437,7 +390,7 @@ Thir *type_binary(Ast *ast, Context *context) {
   case OPERATOR_LESS:
   case OPERATOR_GREATER:
   case OPERATOR_LESS_EQUAL:
-    binary->type = context->bool_type;
+    binary->type = c->bool_type;
     break;
 
   case OPERATOR_DEREFERENCE:
@@ -492,25 +445,24 @@ Thir *type_binary(Ast *ast, Context *context) {
   return binary;
 }
 
-Thir *type_return(Ast *ast, Context *context) {
-  Thir *ret = thir_alloc(context, THIR_RETURN, ast->span);
+Thir *type_return(Ast *ast, Context *c) {
+  Thir *ret = thir_alloc(c, THIR_RETURN, ast->span);
   if (ast->return_value) {
-    ret->return_value = type_expression(ast->return_value, context);
-    if (context->typer_expected_type && ret->return_value->type != context->typer_expected_type) {
+    ret->return_value = type_expression(ast->return_value, c);
+    if (c->typer_expected_type && ret->return_value->type != c->typer_expected_type) {
       fprintf(stderr, "invalid return type at: %s. \"%s\" does not match expected \"%s\"\n", lexer_span_to_string(ast->span),
-              ret->return_value->type->name, context->typer_expected_type->name);
+              ret->return_value->type->name, c->typer_expected_type->name);
       exit(1);
     }
-  } else if (context->typer_expected_type) {
+  } else if (c->typer_expected_type) {
     fprintf(stderr,
             "invalid return type at: %s. this function must return a "
             "value.expected: \"%s\"\n",
-            lexer_span_to_string(ast->span), context->typer_expected_type->name);
+            lexer_span_to_string(ast->span), c->typer_expected_type->name);
     exit(1);
   }
   return ret;
 }
-
 Thir *type_call(Ast *ast, Context *context) {
   Binding *callee = get_binding(ast->call.callee, context);
 
@@ -529,11 +481,9 @@ Thir *type_call(Ast *ast, Context *context) {
     LIST_PUSH(arguments, arg);
   }
 
-  Thir *function = callee->thir;
-
-  unsigned n_params = function->function.parameters.length;
+  unsigned n_params = callee_type->parameters.length;
   if (n_params != arguments.length) {
-    fprintf(stderr, "invalid call at %s: too %s arguments. expected %d, but got %d.\n", lexer_span_to_string(ast->span),
+    fprintf(stderr, "invalid call at %s: too %s arguments. expected %u, but got %u.\n", lexer_span_to_string(ast->span),
             n_params > arguments.length ? "few" : "many", n_params, arguments.length);
     exit(1);
   }
@@ -541,16 +491,15 @@ Thir *type_call(Ast *ast, Context *context) {
   Thir *call = thir_alloc(context, THIR_CALL, ast->span);
   call->call.arguments = arguments;
   call->call.callee = callee;
-
-  call->type = callee_type->returns; // Set our type to the return type.
+  call->type = callee_type->returns;
 
   return call;
 }
 
-Type *get_type_from_ast_type(Ast *ast, Context *context) {
+Type *get_type_from_ast_type(Ast *ast, Context *c) {
   Type *base_type = nullptr;
 
-  LIST_FOREACH(context->type_table, type) {
+  LIST_FOREACH(c->type_table, type) {
     if (!type->name) {
       continue;
     }
@@ -583,7 +532,7 @@ Type *get_type_from_ast_type(Ast *ast, Context *context) {
 
   // found the base type, but not the extended type.
   if (base_type) {
-    Type *extended_type = type_alloc(context);
+    Type *extended_type = type_alloc(c);
     extended_type->extensions = ast->type.extensions;
     extended_type->pointee = base_type;
     extended_type->name = base_type->name;
@@ -595,8 +544,8 @@ Type *get_type_from_ast_type(Ast *ast, Context *context) {
   return nullptr;
 }
 
-Thir *type_variable(Ast *ast, Context *context) {
-  Thir *var = thir_alloc(context, THIR_VARIABLE, ast->span);
+Thir *type_variable(Ast *ast, Context *c) {
+  Thir *var = thir_alloc(c, THIR_VARIABLE, ast->span);
 
   Thir *initializer = nullptr;
 
@@ -606,13 +555,13 @@ Thir *type_variable(Ast *ast, Context *context) {
     exit(1);
   }
 
-  Type *type = get_type_from_ast_type(ast->variable.type, context);
+  Type *type = get_type_from_ast_type(ast->variable.type, c);
 
   if (ast->variable.initializer) {
-    Type *old_expected = context->typer_expected_type;
-    context->typer_expected_type = type;
-    initializer = type_expression(ast->variable.initializer, context);
-    context->typer_expected_type = old_expected;
+    Type *old_expected = c->typer_expected_type;
+    c->typer_expected_type = type;
+    initializer = type_expression(ast->variable.initializer, c);
+    c->typer_expected_type = old_expected;
   } else {
     fprintf(stderr, "uninitialized variables not allowed: %d, at: %s\n", ast->variable.initializer->tag,
             lexer_span_to_string(ast->variable.initializer->span));
@@ -632,7 +581,7 @@ Thir *type_variable(Ast *ast, Context *context) {
   binding.type = initializer->type;
 
   // TODO: this variable system needs work, we have to do some backflips
-  bind_variable(context, binding);
+  bind_variable(c, binding);
 
   var->type = initializer->type;
   var->variable_initializer = initializer;
@@ -640,20 +589,20 @@ Thir *type_variable(Ast *ast, Context *context) {
   return var;
 }
 
-Thir *type_aggregate_initializer(Ast *ast, Context *context) {
-  Type *type = context->typer_expected_type;
+Thir *type_aggregate_initializer(Ast *ast, Context *c) {
+  Type *type = c->typer_expected_type;
 
   // if you just provide one value, such as {0}, and it's not a struct nor array, just do
   if (type->tag != TYPE_STRUCT && !type_is_array(type) && ast->aggregate_initializer.keys.length == 0 &&
       ast->aggregate_initializer.values.length == 1) {
-    return type_expression(ast->aggregate_initializer.values.data[0], context);
+    return type_expression(ast->aggregate_initializer.values.data[0], c);
   }
 
   Type_Ptr_list value_types = {0};
   Thir_Ptr_list values = {0};
   LIST_FOREACH(ast->aggregate_initializer.values, value) {
     Thir *v;
-    LIST_PUSH(values, v = type_expression(value, context));
+    LIST_PUSH(values, v = type_expression(value, c));
     LIST_PUSH(value_types, v->type);
   }
 
@@ -680,7 +629,7 @@ Thir *type_aggregate_initializer(Ast *ast, Context *context) {
         }
         LIST_PUSH(keys, member.name);
       }
-      Thir *thir = thir_alloc(context, THIR_AGGREGATE_INITIALIZER, ast->span);
+      Thir *thir = thir_alloc(c, THIR_AGGREGATE_INITIALIZER, ast->span);
       thir->aggregate_initializer.values = values;
       thir->aggregate_initializer.keys = keys;
       thir->type = type;
@@ -739,7 +688,7 @@ Thir *type_aggregate_initializer(Ast *ast, Context *context) {
         LIST_PUSH(reordered_keys, member_name);
       }
 
-      Thir *thir = thir_alloc(context, THIR_AGGREGATE_INITIALIZER, ast->span);
+      Thir *thir = thir_alloc(c, THIR_AGGREGATE_INITIALIZER, ast->span);
       thir->aggregate_initializer.values = reordered_values;
       thir->aggregate_initializer.keys = reordered_keys;
       thir->type = type;
@@ -752,7 +701,7 @@ Thir *type_aggregate_initializer(Ast *ast, Context *context) {
       fprintf(stderr, "error: array initializers must use values only, not keys, at: %s\n", lexer_span_to_string(ast->span));
       exit(1);
     }
-    Thir *thir = thir_alloc(context, THIR_ARRAY_INITIALIZER, ast->span);
+    Thir *thir = thir_alloc(c, THIR_ARRAY_INITIALIZER, ast->span);
     thir->array_initializer.values = values;
     thir->type = type;
     return thir;
@@ -765,20 +714,58 @@ Thir *type_aggregate_initializer(Ast *ast, Context *context) {
   }
 }
 
-void type_struct(Ast *ast, Context *context) {
+Binding_Ptr_list convert_ast_parameters_to_thir_parameters(Context *context, Parameter_list parameters, Span span,
+                                                           Type_Ptr_list *argument_types) {
+  Binding_Ptr_list bindings = {0};
+  LIST_FOREACH(parameters, param) {
+    Thir_Ptr thir_param = thir_alloc(context, THIR_VARIABLE, span);
+    Type *param_type = get_type_from_ast_type(param.type, context);
 
-  Type *unused;
-  (void)unused;
-  if (try_find_type(context, ast->$struct.name, &unused)) {
-    fprintf(stderr, "redefinition of struct '%s' at: %s\n", ast->$struct.name, lexer_span_to_string(ast->span));
-    exit(1);
+    if (!param_type) {
+      fprintf(stderr, "use of undeclared type for parameter '%s' at: %s\n",
+              param.nameless ? "<nameless parameter>" : param.name, lexer_span_to_string(span));
+      exit(1);
+    }
+
+    Binding binding = {.thir = thir_param,
+                       .ast = nullptr,
+                       .name = param.nameless ? "<nameless parameter>" : param.name,
+                       .type = param_type};
+
+    Binding_Ptr ptr = bind_variable(context, binding);
+    thir_param->binding = ptr;
+    thir_param->type = param_type;
+
+    LIST_PTR_PUSH(argument_types, param_type);
+    LIST_PUSH(bindings, ptr);
   }
 
-  Struct_Type *type = struct_type_alloc(context, ast->$struct.name);
-  LIST_FOREACH(ast->$struct.members, member) {
-    Struct_Member struct_member;
-    struct_member.name = member.name;
-    struct_member.type = get_type_from_ast_type(member.type, context);
-    LIST_PUSH(type->members, struct_member);
+  return bindings;
+}
+
+Type_Ptr_list collect_parameter_types(Parameter_list params, Span span, Context *ctx) {
+  Type_Ptr_list types = {0};
+  LIST_FOREACH(params, p) {
+    Type *t = get_type_from_ast_type(p.type, ctx);
+    if (!t) {
+      fprintf(stderr, "use of undeclared type for parameter '%s' at: %s\n", p.nameless ? "<nameless parameter>" : p.name,
+              lexer_span_to_string(span));
+      exit(1);
+    }
+    LIST_PTR_PUSH(&types, t);
   }
+  return types;
+}
+
+const char *get_function_type_string(Type_Ptr_list arguments, Type *return_type) {
+  String_Builder sb = {0};
+  sb_append(&sb, "function :: (");
+  LIST_FOREACH(arguments, arg) {
+    sb_append(&sb, arg->name);
+    if (__i != arguments.length - 1) {
+      sb_append(&sb, ", ");
+    }
+  }
+  sb_appendf(&sb, ") %s;", return_type->name);
+  return sb.value;
 }
