@@ -8,14 +8,8 @@
 #include "type.h"
 #include <dlfcn.h>
 #include <ffi.h>
-#include <stdnoreturn.h>
-
-#define _GNU_SOURCE
-#ifndef __USE_MISC
-#define __USE_MISC
-#endif
-
 #include <stdio.h>
+#include <stdnoreturn.h>
 
 const char *get_function_type_string(Type_Ptr_list arguments, Type *return_type) {
   String_Builder sb = {0};

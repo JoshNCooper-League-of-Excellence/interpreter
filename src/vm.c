@@ -1,7 +1,7 @@
 #include "vm.h"
 #include "list.h"
 #include "string_builder.h"
-#include "tac.h"
+#include "ir.h"
 #include "type.h"
 #include <dlfcn.h>
 #include <ffi.h>

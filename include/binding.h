@@ -48,10 +48,11 @@ typedef struct {
   Arena type_arena, ast_arena, thir_arena, binding_arena, function_type_arena, struct_type_arena;
 } Context;
 
-static inline bool try_find_type(Context *context, const char *name,
-                                 Type **out) {
+static inline bool try_find_type(Context *context, const char *name, Type **out) {
   LIST_FOREACH(context->type_table, type) {
-    if (!type->name) { continue; }
+    if (!type->name) {
+      continue;
+    }
     if (strcmp(name, type->name) == 0) {
       *out = type;
       return true;
@@ -60,9 +61,7 @@ static inline bool try_find_type(Context *context, const char *name,
   return false;
 }
 
-static inline bool try_find_function_type(Context *context,
-                                          Type_Ptr_list parameter_types,
-                                          Type *return_type,
+static inline bool try_find_function_type(Context *context, Type_Ptr_list parameter_types, Type *return_type,
                                           Function_Type **out) {
   LIST_FOREACH(context->type_table, type) {
     if (type->tag != TYPE_FUNCTION) {

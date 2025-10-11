@@ -3,7 +3,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "string_builder.h"
-#include "tac.h"
+#include "ir.h"
 #include "thir.h"
 #include "vm.h"
 #include <stddef.h>

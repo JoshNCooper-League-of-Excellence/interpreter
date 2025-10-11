@@ -2,7 +2,7 @@
 #define VM_H
 
 #include "string_builder.h"
-#include "tac.h"
+#include "ir.h"
 
 typedef struct {
   int argc;

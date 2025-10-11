@@ -1,4 +1,4 @@
-#include "tac.h"
+#include "ir.h"
 #include "ast.h"
 #include "binding.h"
 #include "lexer.h"
@@ -8,7 +8,7 @@
 #include "type.h"
 
 /**
- * TAC quick reference (for VM/compiler implementers)
+ * IR quick reference (for VM/compiler implementers)
  *
  * Value model
  * - integer: signed 64-bit ("integer"). Booleans are unsignedegers 0/1.
@@ -79,7 +79,7 @@ unsigned add_constant(Module *m, Thir *thir) {
   case TYPE_STRUCT:
   case TYPE_VOID:
   case TYPE_FUNCTION:
-    assert(false && "[TAC]: invalid constant type, expected 'unsigned' or 'string'");
+    assert(false && "[IR]: invalid constant type, expected 'unsigned' or 'string'");
     break;
   }
 
@@ -91,7 +91,7 @@ unsigned add_constant(Module *m, Thir *thir) {
     } else if (strncmp("false", value, 5) == 0) {
       value = "0";
     } else {
-      assert(false && "[TAC]: invalid constant bool, expected 'true' or 'false'");
+      assert(false && "[IR]: invalid constant bool, expected 'true' or 'false'");
     }
   }
 
@@ -546,7 +546,7 @@ void lower_block(Thir *block, Function *fn, Module *m) {
     case THIR_LOOP: {
       // TODO combine these, extract a lower_stmt and such
       if (block->loop.initializer && block->loop.increment) {
-        fprintf(stderr, "init; cond; inc; loops not yet supported by TAC lowering\n");
+        fprintf(stderr, "init; cond; inc; loops not yet supported by IR compiler\n");
         exit(1);
       } else {
         unsigned loop_start = fn->code.length;

@@ -1,5 +1,5 @@
-#ifndef TAC_H
-#define TAC_H
+#ifndef IR_H
+#define IR_H
 
 #include "list.h"
 #include "thir.h"
