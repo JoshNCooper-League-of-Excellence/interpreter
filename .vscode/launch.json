@@ -6,7 +6,7 @@
       "name": "Launch",
       "program": "${workspaceFolder}/bin/debug/bindings",
       "args": [
-        "tests/expr_bin.b",
+        "main.b", "-o=main.ir"
       ],
       "cwd": "${workspaceFolder}"
     }

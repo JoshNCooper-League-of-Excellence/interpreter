@@ -178,6 +178,7 @@ typedef enum {
   AST_STRUCT,
   AST_IF,
   AST_WHILE,
+  AST_FOR,
 } Ast_Tag;
 
 typedef struct {
@@ -210,6 +211,14 @@ typedef struct Ast {
     Ast_Ptr_list program;
     Ast_Ptr_list block;
     struct Ast *return_value;
+
+    struct {
+      struct Ast *init;
+      struct Ast *condition;
+      struct Ast *update;
+      struct Ast *block;
+    } $for;
+
     struct {
       const char *name;
       Ast_Struct_Member_list members;

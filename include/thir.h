@@ -56,9 +56,9 @@ typedef struct Thir {
     // Both while and for use this.
     // while just doesn't use the initializer nor increment
     struct {
-      struct Thir *initializer; // optional.
+      struct Thir *init; // optional.
       struct Thir *condition;
-      struct Thir *increment; // optional
+      struct Thir *update; // optional
       struct Thir *block;
     } loop;
 
@@ -156,7 +156,7 @@ static inline void use_of_undeclared(const char *kind, const char *identifier, S
 
 Binding_Ptr_list convert_ast_parameters_to_thir_parameters(Context *context, Parameter_list parameters, Span span,
                                                            Type_Ptr_list *argument_types);
-                                                           
+
 Type_Ptr_list collect_parameter_types(Parameter_list params, Span span, Context *ctx);
 
 #endif

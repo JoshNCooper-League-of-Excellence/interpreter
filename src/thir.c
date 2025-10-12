@@ -160,10 +160,8 @@ Thir *type_extern(Ast *ast, Context *c) {
   }
 
   Thir *thir = thir_alloc(c, THIR_EXTERN, ast->span);
-
   const char *name = ast->extern_function.name;
   thir->extern_function.name = name;
-
   Type_Ptr_list argument_types = collect_parameter_types(ast->extern_function.parameters, ast->span, c);
   thir->extern_function.parameters = (Binding_Ptr_list){0};
 
@@ -173,6 +171,7 @@ Thir *type_extern(Ast *ast, Context *c) {
             lexer_span_to_string(ast->span));
     exit(1);
   }
+
   thir->extern_function.return_type = return_type;
 
   Function_Type *fty = NULL;
@@ -182,8 +181,14 @@ Thir *type_extern(Ast *ast, Context *c) {
     fty->parameters = argument_types;
     fty->returns = return_type;
   }
-  thir->type = (Type *)fty;
 
+  if (!fty) {
+    fprintf(stderr, "failed to allocate function type for extern at: %s\n", lexer_span_to_string(ast->span));
+    exit(1);
+  }
+
+  thir->type = (Type *)fty;
+  
   Binding b = {0};
   b.ast = ast;
   b.thir = thir;
@@ -264,12 +269,24 @@ Thir *type_while(Ast *ast, Context *c) {
   Thir *block = type_block(ast->$while.block, c);
   Thir *loop = thir_alloc(c, THIR_LOOP, ast->span);
   loop->loop.condition = condition;
-  loop->loop.increment = nullptr;
-  loop->loop.initializer = nullptr;
+  loop->loop.update = nullptr;
+  loop->loop.init = nullptr;
   loop->loop.block = block;
   return loop;
 }
 
+Thir *type_for(Ast *ast, Context *c) {
+  Thir *init = type_variable(ast->$for.init, c);
+  Thir *condition = type_expression(ast->$for.condition, c);
+  Thir *update = type_expression(ast->$for.update, c);
+  Thir *block = type_block(ast->$for.block, c);
+  Thir *loop = thir_alloc(c, THIR_LOOP, ast->span);
+  loop->loop.init = init;
+  loop->loop.update = update;
+  loop->loop.condition = condition;
+  loop->loop.block = block;
+  return loop;
+}
 Thir *type_block(Ast *ast, Context *c) {
   Thir *block = thir_alloc(c, THIR_BLOCK, ast->span);
 
@@ -278,6 +295,9 @@ Thir *type_block(Ast *ast, Context *c) {
     switch (statement->tag) {
     case AST_ERROR:
       report_error(statement);
+    case AST_FOR:
+      LIST_PUSH(statements, type_for(statement, c));
+      break;
     case AST_WHILE:
       LIST_PUSH(statements, type_while(statement, c));
       break;
@@ -463,6 +483,7 @@ Thir *type_return(Ast *ast, Context *c) {
   }
   return ret;
 }
+
 Thir *type_call(Ast *ast, Context *context) {
   Binding *callee = get_binding(ast->call.callee, context);
 

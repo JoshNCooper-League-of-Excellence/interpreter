@@ -120,12 +120,12 @@ unsigned push_function(Module *m, Function *f) {
 }
 
 unsigned generate_temp(Function *fn, Type *type) {
-  unsigned dest = fn->n_locals;
-
-  if (!type) {
-    abort();
+  if (!type || !type->name) {
+    fprintf(stderr, "[IR] Error: Invalid type or type name is null in generate_temp\n");
+    exit(1);
   }
 
+  unsigned dest = fn->n_locals;
   LIST_PUSH(fn->local_types, type->index);
   fn->n_locals += 1;
   return dest;
@@ -466,9 +466,8 @@ unsigned lower_expression(Thir *n, Function *fn, Module *m) {
       EMIT_PUSH(fn->code, dest);
     }
 
-    unsigned dest = generate_temp(fn, n->type);
     assert(n->call.callee && "null callee while lowering");
-
+    unsigned dest = generate_temp(fn, n->type);
     if (n->call.callee->thir->tag == THIR_EXTERN) {
       EMIT_CALL_EXTERN(fn->code, dest, n->call.callee->thir->extern_function.index, nargs);
     } else {
@@ -540,14 +539,42 @@ void lower_if(Thir *the_if, Function *fn, Module *m) {
   fn->code.data[jmp_end_idx].a = end_ip - (jmp_end_idx + 1); // to end
 }
 
+void lower_variable(Thir *stmt, Function *fn, Module *m) {
+  unsigned slot = generate_temp(fn, stmt->type);
+  stmt->binding->index = slot;
+  unsigned src = lower_expression(stmt->variable_initializer, fn, m);
+  EMIT_STORE(fn->code, slot, src);
+}
+
 void lower_block(Thir *block, Function *fn, Module *m) {
   LIST_FOREACH(block->block, stmt) {
     switch (stmt->tag) {
     case THIR_LOOP: {
+
+      
       // TODO combine these, extract a lower_stmt and such
-      if (block->loop.initializer && block->loop.increment) {
-        fprintf(stderr, "init; cond; inc; loops not yet supported by IR compiler\n");
-        exit(1);
+      if (stmt->loop.init && stmt->loop.update) {
+        // for(init; cond; update) { body }
+        lower_variable(stmt->loop.init, fn, m);
+
+        unsigned loop_start = fn->code.length;
+        unsigned cond = lower_expression(stmt->loop.condition, fn, m);
+        unsigned jif_idx = fn->code.length;
+        EMIT_JUMP_IF(fn->code, cond, 0); // jump to body if true
+
+        unsigned jmp_end_idx = fn->code.length;
+        EMIT_JUMP(fn->code, 0); // jump to end if false
+
+        unsigned body_start = fn->code.length;
+        lower_block(stmt->loop.block, fn, m);
+
+        lower_expression(stmt->loop.update, fn, m);
+
+        EMIT_JUMP(fn->code, loop_start - fn->code.length); // jump back to loop start
+
+        unsigned end_ip = fn->code.length;
+        fn->code.data[jif_idx].b = body_start - (jif_idx + 1);     // patch JUMP_IF to body
+        fn->code.data[jmp_end_idx].a = end_ip - (jmp_end_idx + 1); // patch JUMP to end
       } else {
         unsigned loop_start = fn->code.length;
         unsigned cond = lower_expression(stmt->loop.condition, fn, m);
@@ -581,10 +608,7 @@ void lower_block(Thir *block, Function *fn, Module *m) {
       break;
     }
     case THIR_VARIABLE: {
-      unsigned slot = generate_temp(fn, stmt->type);
-      stmt->binding->index = slot;
-      unsigned src = lower_expression(stmt->variable_initializer, fn, m);
-      EMIT_STORE(fn->code, slot, src);
+      lower_variable(stmt, fn, m);
       break;
     }
     case THIR_BINARY:
@@ -621,7 +645,9 @@ void lower_function(Thir *fnode, Module *m) {
     b->index = i;
   }
 
-  fn->n_locals = fn->param_count;
+  LIST_FOREACH(fnode->function.parameters, parameter) {
+    generate_temp(fn, parameter->type);
+  }
 
   lower_block(fnode->function.block, fn, m);
 
@@ -629,6 +655,8 @@ void lower_function(Thir *fnode, Module *m) {
   if (fn->code.length == 0 || fn->code.data[fn->code.length - 1].op != OP_RET) {
     EMIT_RET(fn->code, 0);
   }
+
+  assert(fn->n_locals == fn->local_types.length && "local types didnt match the count of locals");
 
   push_function(m, fn);
 }
@@ -650,14 +678,21 @@ void lower_program(Thir *program, Module *m) {
 }
 
 static void append_local_type(Function *fn, Module *m, String_Builder *sb, unsigned temp, unsigned array_length) {
+
+  if (fn->local_types.length <= temp) {
+    fprintf(stderr, "[IR] out of bounds access when getting local temp type len(%d) <= idx(%d)\n", fn->local_types.length, temp);
+    exit(1);
+  }
+
   int ty = fn->local_types.data[temp];
   print_type_with_length(m->types.data[ty], sb, array_length);
   sb_append(sb, " ");
 }
 
 void print_instr(Function *fn, Instr *i, String_Builder *sb, unsigned indent, Module *m) {
-  for (unsigned j = 0; j < indent; ++j)
-    sb_append(sb, "  ");
+  for (unsigned j = 0; j < indent; ++j) {
+    sb_append(sb, " ");
+  }
   switch (i->op) {
   case OP_ALLOCA:
     append_local_type(fn, m, sb, i->a, i->c);

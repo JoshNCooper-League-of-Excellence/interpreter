@@ -94,14 +94,30 @@ Ast *parse_program(Lexer *lexer, Context *context) {
   return program;
 }
 
+
+Ast *parse_for(Lexer *lexer, Context *context) {
+  BEGIN_SPAN(EXPECT(TOKEN_FOR));
+  Ast *init = parse_variable(lexer, context);
+  EXPECT(TOKEN_SEMI);
+  Ast *condition = parse_expression(lexer, context);
+  EXPECT(TOKEN_SEMI);
+  Ast *update = parse_expression(lexer, context);
+  Ast *block = parse_block(lexer, context);
+  END_SPAN()
+  Ast *ast = ast_alloc(context, AST_FOR, span);
+  ast->$for.block = block;
+  ast->$for.condition = condition;
+  ast->$for.init = init;
+  ast->$for.update = update;
+  return ast;
+}
+
 Ast *parse_while(Lexer *lexer, Context *context) {
   BEGIN_SPAN(EXPECT(TOKEN_WHILE));
   Ast *condition = nullptr;
   if (lexer_next(lexer) != TOKEN_LCURLY) {
     condition = parse_expression(lexer, context);
   }
-
-  assert(lexer_next(lexer) == TOKEN_LCURLY && "expected lcurly");
 
   Ast *block = parse_block(lexer, context);
   END_SPAN()
@@ -123,6 +139,10 @@ Ast *parse_block(Lexer *lexer, Context *context) {
 
     bool expect_semi = true;
     switch (peeked.type) {
+      case TOKEN_FOR: 
+      expect_semi = false;
+      LIST_PUSH(statements, OK(parse_for(lexer, context)));
+      break;
     case TOKEN_WHILE: 
       expect_semi = false;
       LIST_PUSH(statements, OK(parse_while(lexer, context)));

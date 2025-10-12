@@ -63,4 +63,10 @@ static inline void sb_free(String_Builder *sb) {
   sb->value = nullptr;
 }
 
+// flush the sb to a file with a newline and then free the sb
+static inline void sb_flush(String_Builder *sb, FILE *file) {
+  fprintf(file, "%s\n", sb->value);
+  sb_free(sb);
+}
+
 #endif // #ifndef STRING_BUILDER_H

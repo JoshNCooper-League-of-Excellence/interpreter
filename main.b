@@ -1,6 +1,6 @@
 /* 
   todo:
-  
+
   [x] arena allocators 
   [/] typed operands for ir (*we have some type information, but needs to be more like LLVM's -- type encoded operands for every instr*)
   [] add modules and importing
@@ -31,6 +31,10 @@ main :: () void {
   x int = 0;
   s string = str("Hello, World!");
 
+  puts("loop start\n");
+  for i int = 0; i < 1000000000; i += 1 {}
+  puts("loop end\n");
+
   ab int[] = {0, 1, 2, 3, 4};
   if s.length > 12 {
     puts(s.data);
@@ -39,7 +43,7 @@ main :: () void {
 
 str :: (data byte*) string {
   return { data, strlen(data) };
-}
+} 
 
 struct string { data byte*, length int }
 

@@ -43,6 +43,7 @@ typedef enum {
   TOKEN_IF,
   TOKEN_ELSE,
   TOKEN_WHILE,
+  TOKEN_FOR,
 
   TOKEN_PLUS,
   TOKEN_MINUS,
@@ -265,7 +266,7 @@ static inline Token lexer_gettok(Lexer *lexer) {
         size_t len;
       } keywords[] = {{"extern", TOKEN_EXTERN, 6}, {"true", TOKEN_TRUE, 4},     {"false", TOKEN_FALSE, 5},
                       {"struct", TOKEN_STRUCT, 6}, {"return", TOKEN_RETURN, 6}, {"if", TOKEN_IF, 2},
-                      {"else", TOKEN_ELSE, 4},     {"while", TOKEN_WHILE, 5}};
+                      {"else", TOKEN_ELSE, 4},     {"while", TOKEN_WHILE, 5}, {"for", TOKEN_FOR, 3}};
 
       for (size_t i = 0; i < sizeof(keywords) / sizeof(keywords[0]); ++i) {
         if (len == keywords[i].len && strncmp(lexer->input + start, keywords[i].kw, keywords[i].len) == 0) {
@@ -513,6 +514,11 @@ static inline bool token_is_operator(Token_Type type) {
 static inline bool lexer_next_is_operator(Lexer *lexer) {
   Token_Type type = lexer_next(lexer);
   return token_is_operator(type);
+}
+
+static inline void lexer_free(Lexer *lexer) {
+  free((char*)lexer->input);
+  LIST_FREE(lexer->lookahead);
 }
 
 #endif
