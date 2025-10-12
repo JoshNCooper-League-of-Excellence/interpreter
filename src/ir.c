@@ -311,7 +311,7 @@ unsigned lower_expression(Thir *n, Function *fn, Module *m) {
       EMIT_MEMBER_STORE(fn->code, dest, __i, v);
     }
     return dest;
-  } break;
+  }
   case THIR_MEMBER_ACCESS: {
     return lower_member_rvalue(n, fn, m);
   }
@@ -434,14 +434,12 @@ unsigned lower_expression(Thir *n, Function *fn, Module *m) {
       unsigned tmp = generate_temp(fn, n->type);
       EMIT_GREATER(fn->code, tmp, l, r);
       EMIT_LOGICAL_NOT(fn->code, dest, tmp);
-      break;
-    }
+    } break;
     case OPERATOR_GREATER_EQUAL: {
       unsigned tmp = generate_temp(fn, n->type);
       EMIT_LESS(fn->code, tmp, l, r);
       EMIT_LOGICAL_NOT(fn->code, dest, tmp);
-      break;
-    }
+    } break;
     case OPERATOR_SHIFT_LEFT:
       EMIT_SHIFT_LEFT(fn->code, dest, l, r);
       break;
@@ -453,19 +451,16 @@ unsigned lower_expression(Thir *n, Function *fn, Module *m) {
       break;
     default:
       fprintf(stderr, "lower_expression: unhandled binary op %d\n", n->binary.op);
-      break;
     }
 
     return dest;
   }
   case THIR_CALL: {
     unsigned nargs = n->call.arguments.length;
-
     LIST_FOREACH(n->call.arguments, argument) {
       unsigned dest = lower_expression(argument, fn, m);
       EMIT_PUSH(fn->code, dest);
     }
-
     assert(n->call.callee && "null callee while lowering");
     unsigned dest = generate_temp(fn, n->type);
     if (n->call.callee->thir->tag == THIR_EXTERN) {
@@ -486,6 +481,7 @@ unsigned lower_expression(Thir *n, Function *fn, Module *m) {
   default:
     fprintf(stderr, "lower_expr: unhandled expression THIR tag %d\n", n->tag);
     exit(1);
+    break;
   }
 }
 
@@ -550,51 +546,32 @@ void lower_block(Thir *block, Function *fn, Module *m) {
   LIST_FOREACH(block->block, stmt) {
     switch (stmt->tag) {
     case THIR_LOOP: {
-
-      
-      // TODO combine these, extract a lower_stmt and such
-      if (stmt->loop.init && stmt->loop.update) {
-        // for(init; cond; update) { body }
+      // Combined loop lowering for both for and while
+      if (stmt->loop.init) {
         lower_variable(stmt->loop.init, fn, m);
-
-        unsigned loop_start = fn->code.length;
-        unsigned cond = lower_expression(stmt->loop.condition, fn, m);
-        unsigned jif_idx = fn->code.length;
-        EMIT_JUMP_IF(fn->code, cond, 0); // jump to body if true
-
-        unsigned jmp_end_idx = fn->code.length;
-        EMIT_JUMP(fn->code, 0); // jump to end if false
-
-        unsigned body_start = fn->code.length;
-        lower_block(stmt->loop.block, fn, m);
-
-        lower_expression(stmt->loop.update, fn, m);
-
-        EMIT_JUMP(fn->code, loop_start - fn->code.length); // jump back to loop start
-
-        unsigned end_ip = fn->code.length;
-        fn->code.data[jif_idx].b = body_start - (jif_idx + 1);     // patch JUMP_IF to body
-        fn->code.data[jmp_end_idx].a = end_ip - (jmp_end_idx + 1); // patch JUMP to end
-      } else {
-        unsigned loop_start = fn->code.length;
-        unsigned cond = lower_expression(stmt->loop.condition, fn, m);
-        unsigned jif_idx = fn->code.length;
-        EMIT_JUMP_IF(fn->code, cond, 0); // jump to body if true
-
-        unsigned jmp_end_idx = fn->code.length;
-        EMIT_JUMP(fn->code, 0); // jump to end if false
-
-        unsigned body_start = fn->code.length;
-        lower_block(stmt->loop.block, fn, m);
-
-        EMIT_JUMP(fn->code, loop_start - (fn->code.length + 1)); // jump back to loop start
-
-        unsigned end_ip = fn->code.length;
-        fn->code.data[jif_idx].b = body_start - (jif_idx + 1);     // patch JUMP_IF to body
-        fn->code.data[jmp_end_idx].a = end_ip - (jmp_end_idx + 1); // patch JUMP to end
       }
-      break;
-    }
+
+      unsigned loop_start = fn->code.length;
+      unsigned cond = lower_expression(stmt->loop.condition, fn, m);
+      unsigned jif_idx = fn->code.length;
+      EMIT_JUMP_IF(fn->code, cond, 0); // jump to body if true
+
+      unsigned jmp_end_idx = fn->code.length;
+      EMIT_JUMP(fn->code, 0); // jump to end if false
+
+      unsigned body_start = fn->code.length;
+      lower_block(stmt->loop.block, fn, m);
+
+      if (stmt->loop.update) {
+        lower_expression(stmt->loop.update, fn, m);
+      }
+
+      EMIT_JUMP(fn->code, loop_start - (fn->code.length + 1)); // jump back to loop start
+
+      unsigned end_ip = fn->code.length;
+      fn->code.data[jif_idx].b = body_start - (jif_idx + 1);     // patch JUMP_IF to body
+      fn->code.data[jmp_end_idx].a = end_ip - (jmp_end_idx + 1); // patch JUMP to end
+    } break;
     case THIR_IF: {
       lower_if(stmt, fn, m);
     } break;
@@ -605,12 +582,10 @@ void lower_block(Thir *block, Function *fn, Module *m) {
       } else {
         EMIT_RET(fn->code, -1);
       }
-      break;
-    }
+    } break;
     case THIR_VARIABLE: {
       lower_variable(stmt, fn, m);
-      break;
-    }
+    } break;
     case THIR_BINARY:
     case THIR_CALL:
     case THIR_LITERAL:
@@ -618,8 +593,7 @@ void lower_block(Thir *block, Function *fn, Module *m) {
       break;
     default: {
       assert(false && "unexpected THIR node in block while lowering");
-      break;
-    }
+    } break;
     }
   }
 }
@@ -645,9 +619,7 @@ void lower_function(Thir *fnode, Module *m) {
     b->index = i;
   }
 
-  LIST_FOREACH(fnode->function.parameters, parameter) {
-    generate_temp(fn, parameter->type);
-  }
+  LIST_FOREACH(fnode->function.parameters, parameter) { generate_temp(fn, parameter->type); }
 
   lower_block(fnode->function.block, fn, m);
 
@@ -680,7 +652,8 @@ void lower_program(Thir *program, Module *m) {
 static void append_local_type(Function *fn, Module *m, String_Builder *sb, unsigned temp, unsigned array_length) {
 
   if (fn->local_types.length <= temp) {
-    fprintf(stderr, "[IR] out of bounds access when getting local temp type len(%d) <= idx(%d)\n", fn->local_types.length, temp);
+    fprintf(stderr, "[IR] out of bounds access when getting local temp type len(%d) <= idx(%d)\n", fn->local_types.length,
+            temp);
     exit(1);
   }
 
@@ -845,12 +818,25 @@ void print_module(Module *m, String_Builder *sb) {
   sb_append(sb, "TYPES:\n");
   for (size_t i = 0; i < m->types.length; ++i) {
     Type *type = m->types.data[i];
-    if (type->tag == TYPE_STRUCT) {
+
+    switch (type->tag) {
+    case TYPE_FUNCTION:
+      break; // ignored.
+    case TYPE_INT:
+    case TYPE_BYTE:
+    case TYPE_VOID:
+    case TYPE_BOOL:
+      sb_appendf(sb, "  [%zu]: ", i);
+      print_type(type, sb);
+      sb_appendch(sb, '\n');
+      break;
+    case TYPE_STRUCT:
       Struct_Type *struct_type = (Struct_Type *)type;
       sb_appendf(sb, "  [%zu]: struct %s {\n", i, type->name);
       LIST_FOREACH(struct_type->members, member) { sb_appendf(sb, "          [%zu]: %s\n", __i, member.type->name); }
       sb_append(sb, "        }\n");
     }
+    break;
   }
 
   sb_append(sb, "CONSTANTS:\n");
@@ -858,12 +844,12 @@ void print_module(Module *m, String_Builder *sb) {
     sb_append(sb, "  ");
     switch (constant.type) {
     case CONST_TYPE_STRING:
-      sb_appendf(sb, "[%d]: { type: %s, value: \"%s\\0\" }\n", __i, constant_type_to_string(constant.type), constant.value);
+      sb_appendf(sb, "[%d]: %s :: \"%s\\0\"\n", __i, constant_type_to_string(constant.type), constant.value);
       break;
     case CONST_TYPE_INT:
-      sb_appendf(sb, "[%d]: { type: %s, value: %s }\n", __i, constant_type_to_string(constant.type), constant.value);
-      break;
+      sb_appendf(sb, "[%d]: %s :: %s\n", __i, constant_type_to_string(constant.type), constant.value);
     }
+    break;
   }
 
   sb_append(sb, "FUNCTIONS:\n");

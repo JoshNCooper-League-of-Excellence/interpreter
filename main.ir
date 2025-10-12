@@ -6,20 +6,32 @@ EXTERNS:
   [4]: extern free(void*) void
   [5]: extern memcpy(byte*, byte*, int) void
 TYPES:
+  [0]: int
+  [1]: byte
+  [2]: byte*
+  [3]: void
+  [4]: bool
   [5]: struct string {
           [0]: byte
           [1]: int
         }
+  [8]: void*
+  [14]: int[]
 CONSTANTS:
-  [0]: { type: int, value: 0 }
-  [1]: { type: int, value: 100 }
-  [2]: { type: int, value: 2 }
-  [3]: { type: byte*, value: "a[1] = %d\n\0" }
-  [4]: { type: int, value: 1 }
-  [5]: { type: int, value: 10 }
-  [6]: { type: byte*, value: "a[0] = %d\n\0" }
-  [7]: { type: byte*, value: "Hello, World!\0" }
-  [8]: { type: byte*, value: "%d\n\0" }
+  [0]: int :: 0
+  [1]: int :: 100
+  [2]: int :: 2
+  [3]: byte* :: "a[1] = %d\n\0"
+  [4]: int :: 1
+  [5]: int :: 10
+  [6]: byte* :: "a[0] = %d\n\0"
+  [7]: byte* :: "Hello, World!\0"
+  [8]: byte* :: "loop start\n\0"
+  [9]: int :: 100000
+  [10]: byte* :: "loop end\n\0"
+  [11]: int :: 3
+  [12]: int :: 4
+  [13]: int :: 12
 FUNCTIONS:
 main() void:
   int[3] t1 = ALLOCA 0, 3
@@ -49,29 +61,52 @@ main() void:
   int[] t16 = MEMBER_LOAD_INDIRECT t14, t15
   PUSH t16
   int t17 = CALL_EXTERN 0, 2
-  int t19 = CONST c0
-  STORE 18, t19
-  byte* t21 = CONST c7
+  byte* t19 = CONST c7
+  PUSH t19
+  string t20 = CALL 1, 1
+  STORE 18, t20
+  byte* t21 = CONST c8
   PUSH t21
-  string t22 = CALL 1, 1
-  STORE 20, t22
+  int t22 = CALL_EXTERN 1, 1
   int t24 = CONST c0
   STORE 23, t24
-  int t25 = LOAD 23
-  int t26 = CONST c1
-  bool t27 = LESS t25, t26
-  JUMP_IF t27, 1
-  JUMP 10
-  byte* t28 = CONST c8
-  PUSH t28
-  int t29 = LOAD 23
-  PUSH t29
-  int t30 = CALL_EXTERN 0, 2
-  int t31 = LOAD 23
-  int t32 = CONST c4
-  int t33 = ADD t31, t32
-  STORE 23, t33
-  JUMP -15
+  int t26 = CONST c0
+  STORE 25, t26
+  int t27 = LOAD 25
+  int t28 = CONST c9
+  bool t29 = LESS t27, t28
+  JUMP_IF t29, 1
+  JUMP 5
+  int t30 = LOAD 25
+  int t31 = CONST c4
+  int t32 = ADD t30, t31
+  STORE 25, t32
+  JUMP -10
+  byte* t33 = CONST c10
+  PUSH t33
+  int t34 = CALL_EXTERN 1, 1
+  int[5] t36 = ALLOCA 0, 5
+  int t37 = CONST c0
+  MEMBER_STORE t36, 0, t37
+  int t38 = CONST c4
+  MEMBER_STORE t36, 1, t38
+  int t39 = CONST c2
+  MEMBER_STORE t36, 2, t39
+  int t40 = CONST c11
+  MEMBER_STORE t36, 3, t40
+  int t41 = CONST c12
+  MEMBER_STORE t36, 4, t41
+  STORE 35, t36
+  string t42 = LOAD 18
+  int t43 = MEMBER_LOAD t42, 1
+  int t44 = CONST c13
+  bool t45 = GREATER t43, t44
+  JUMP_IF t45, 1
+  JUMP 4
+  string t46 = LOAD 18
+  byte* t47 = MEMBER_LOAD t46, 0
+  PUSH t47
+  int t48 = CALL_EXTERN 1, 1
   RET t0
 str(0 byte*) string:
   string t1 = ALLOCA 5, 0

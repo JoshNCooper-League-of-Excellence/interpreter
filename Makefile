@@ -1,41 +1,21 @@
-PRJ_NAME := bindings
-COMPILER := clang
-COMPILER_FLAGS := -std=c23 -Iinclude -g -Wall -Wextra
+PRJ_NAME := compiler
+CC := clang
+CFLAGS := -std=c23 -Iinclude -g -Wall -Wextra
 LD_FLAGS := -lffi
-SRC_EXT_PAT := src/%.c
-OBJ_DIR := obj
-REL_OBJ_DIR := obj/release
-DBG_OBJ_DIR := obj/debug
-REL_BIN_DIR := bin/release
-DBG_BIN_DIR := bin/debug
 BIN_DIR := bin
+BIN := $(BIN_DIR)/$(PRJ_NAME)
 SRCS := $(wildcard src/*.c)
 
-REL_OBJS := $(patsubst $(SRC_EXT_PAT), $(REL_OBJ_DIR)/%.o, $(SRCS))
-DBG_OBJS := $(patsubst $(SRC_EXT_PAT), $(DBG_OBJ_DIR)/%.o, $(SRCS))
-
-all: directories $(PRJ_NAME)
+all: $(BIN)
 
 directories:
-	mkdir -p $(REL_OBJ_DIR) $(DBG_OBJ_DIR) $(DBG_BIN_DIR) $(REL_BIN_DIR)
+	mkdir -p $(BIN_DIR)
 
-$(PRJ_NAME): $(DBG_OBJS)
-	$(COMPILER) $(COMPILER_FLAGS) -g -o $(DBG_BIN_DIR)/$(PRJ_NAME) $^ $(LD_FLAGS)
-
-release: $(REL_OBJS)
-	$(COMPILER) $(COMPILER_FLAGS) -O3 -o $(REL_BIN_DIR)/$(PRJ_NAME) $^ $(LD_FLAGS)
-
-$(REL_OBJ_DIR)/%.o: $(SRC_EXT_PAT)
-	$(COMPILER) $(COMPILER_FLAGS) -c $< -o $@
-
-$(DBG_OBJ_DIR)/%.o: $(SRC_EXT_PAT)
-	$(COMPILER) $(COMPILER_FLAGS) -c $< -o $@
+$(BIN): directories
+	$(CC) $(CFLAGS) -o $(BIN) $(SRCS) $(LD_FLAGS)
 
 clean:
-	rm -rf $(OBJ_DIR) $(BIN_DIR)
+	rm -rf $(BIN_DIR)
 
-run: all $(PRJ_NAME)
-	./$(DBG_BIN_DIR)/$(PRJ_NAME)
-
-run-release: directories release
-	./$(REL_BIN_DIR)/$(PRJ_NAME)
+run: all
+	./$(BIN)
