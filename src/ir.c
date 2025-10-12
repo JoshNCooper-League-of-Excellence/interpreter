@@ -119,14 +119,8 @@ unsigned push_function(Module *m, Function *f) {
   return index;
 }
 
-unsigned generate_temp(Function *fn, Type *type) {
-  if (!type || !type->name) {
-    fprintf(stderr, "[IR] Error: Invalid type or type name is null in generate_temp\n");
-    exit(1);
-  }
-
+unsigned generate_temp(Function *fn) {
   unsigned dest = fn->n_locals;
-  LIST_PUSH(fn->local_types, type->index);
   fn->n_locals += 1;
   return dest;
 }
@@ -150,14 +144,14 @@ int lower_member_rvalue(Thir *n, Function *fn, Module *m) {
 
   int obj;
   if (base->tag == THIR_VARIABLE) {
-    obj = generate_temp(fn, base->type);
+    obj = generate_temp(fn);
     EMIT_LOAD(fn->code, obj, base->binding->index);
   } else {
     obj = lower_expression(base, fn, m);
   }
 
   for (int i = depth - 1; i >= 0; --i) {
-    unsigned tmp = generate_temp(fn, n->type);
+    unsigned tmp = generate_temp(fn);
     EMIT_MEMBER_LOAD(fn->code, tmp, obj, leaf_to_root[i]);
     obj = tmp;
   }
@@ -170,14 +164,14 @@ static unsigned lower_index_rvalue(Thir *n, Function *fn, Module *m) {
 
   unsigned obj;
   if (base->tag == THIR_VARIABLE) {
-    obj = generate_temp(fn, base->type);
+    obj = generate_temp(fn);
     EMIT_LOAD(fn->code, obj, (unsigned)base->binding->index);
   } else {
     obj = lower_expression(base, fn, m);
   }
 
   unsigned idx = lower_expression(n->binary.right, fn, m);
-  unsigned out = generate_temp(fn, n->type);
+  unsigned out = generate_temp(fn);
   EMIT_MEMBER_LOAD_INDIRECT(fn->code, out, obj, idx);
   return out;
 }
@@ -188,7 +182,7 @@ static unsigned lower_index_assignment(Thir *lhs, unsigned rhs, Function *fn, Mo
   assert(base->tag == THIR_VARIABLE && "assignment to non-lvalue index base");
 
   unsigned slot = (unsigned)base->binding->index;
-  unsigned obj = generate_temp(fn, base->type);
+  unsigned obj = generate_temp(fn);
   EMIT_LOAD(fn->code, obj, slot);
 
   unsigned idx = lower_expression(lhs->binary.right, fn, m);
@@ -215,14 +209,14 @@ unsigned lower_member_assignment(Thir *lhs, unsigned rhs, Function *fn) {
   unsigned slot = (unsigned)base->binding->index;
 
   // Load the top-level struct value
-  unsigned obj0 = generate_temp(fn, base->type);
+  unsigned obj0 = generate_temp(fn);
   EMIT_LOAD(fn->code, obj0, slot);
 
   // Build containers down to the parent of the leaf
   unsigned containers[33];
   containers[0] = obj0;
   for (int i = 0; i < depth - 1; ++i) {
-    unsigned tmp = generate_temp(fn, base->type);
+    unsigned tmp = generate_temp(fn);
     EMIT_MEMBER_LOAD(fn->code, tmp, containers[i], path[i]);
     containers[i + 1] = tmp;
   }
@@ -254,7 +248,7 @@ unsigned lower_get_lvalue(Thir *lhs, Function *fn, Module *m) {
     }
     break;
   case THIR_VARIABLE: {
-    unsigned tmp = generate_temp(fn, lhs->type);
+    unsigned tmp = generate_temp(fn);
     EMIT_LOAD(fn->code, tmp, (unsigned)lhs->binding->index);
     return tmp;
   }
@@ -303,7 +297,7 @@ unsigned lower_expression(Thir *n, Function *fn, Module *m) {
   assert(n && "null expression while lowering");
   switch (n->tag) {
   case THIR_ARRAY_INITIALIZER: {
-    unsigned dest = generate_temp(fn, n->type);
+    unsigned dest = generate_temp(fn);
     unsigned long long length = n->array_initializer.values.length;
     EMIT_ALLOCA(fn->code, dest, n->type->pointee->index, length);
     LIST_FOREACH(n->array_initializer.values, value) {
@@ -316,7 +310,7 @@ unsigned lower_expression(Thir *n, Function *fn, Module *m) {
     return lower_member_rvalue(n, fn, m);
   }
   case THIR_AGGREGATE_INITIALIZER: {
-    unsigned dest = generate_temp(fn, n->type);
+    unsigned dest = generate_temp(fn);
     // length == 0 means one object, length > 0 means array for alloca
     EMIT_ALLOCA(fn->code, dest, n->type->index, 0);
     LIST_FOREACH(n->aggregate_initializer.values, value) {
@@ -326,13 +320,13 @@ unsigned lower_expression(Thir *n, Function *fn, Module *m) {
     return dest;
   }
   case THIR_LITERAL: {
-    unsigned dest = generate_temp(fn, n->type);
+    unsigned dest = generate_temp(fn);
     unsigned cidx = add_constant(m, n);
     EMIT_CONST(fn->code, dest, (unsigned)cidx);
     return dest;
   }
   case THIR_VARIABLE: {
-    unsigned dest = generate_temp(fn, n->type);
+    unsigned dest = generate_temp(fn);
     size_t slot = n->binding->index;
     EMIT_LOAD(fn->code, dest, (unsigned)slot);
     return dest;
@@ -347,7 +341,7 @@ unsigned lower_expression(Thir *n, Function *fn, Module *m) {
     if (operator_is_compound(n->binary.op)) {
       unsigned lhs_val = lower_get_lvalue(n->binary.left, fn, m);
       unsigned rhs = lower_expression(n->binary.right, fn, m);
-      unsigned res = generate_temp(fn, n->type);
+      unsigned res = generate_temp(fn);
 
       switch (n->binary.op) {
       case OPERATOR_PLUS_ASSIGN:
@@ -385,7 +379,7 @@ unsigned lower_expression(Thir *n, Function *fn, Module *m) {
 
     unsigned l = lower_expression(n->binary.left, fn, m);
     unsigned r = lower_expression(n->binary.right, fn, m);
-    unsigned dest = generate_temp(fn, n->type);
+    unsigned dest = generate_temp(fn);
 
     switch (n->binary.op) {
     case OPERATOR_MODULO:
@@ -431,12 +425,12 @@ unsigned lower_expression(Thir *n, Function *fn, Module *m) {
       EMIT_GREATER(fn->code, dest, l, r);
       break;
     case OPERATOR_LESS_EQUAL: {
-      unsigned tmp = generate_temp(fn, n->type);
+      unsigned tmp = generate_temp(fn);
       EMIT_GREATER(fn->code, tmp, l, r);
       EMIT_LOGICAL_NOT(fn->code, dest, tmp);
     } break;
     case OPERATOR_GREATER_EQUAL: {
-      unsigned tmp = generate_temp(fn, n->type);
+      unsigned tmp = generate_temp(fn);
       EMIT_LESS(fn->code, tmp, l, r);
       EMIT_LOGICAL_NOT(fn->code, dest, tmp);
     } break;
@@ -462,7 +456,7 @@ unsigned lower_expression(Thir *n, Function *fn, Module *m) {
       EMIT_PUSH(fn->code, dest);
     }
     assert(n->call.callee && "null callee while lowering");
-    unsigned dest = generate_temp(fn, n->type);
+    unsigned dest = generate_temp(fn);
     if (n->call.callee->thir->tag == THIR_EXTERN) {
       EMIT_CALL_EXTERN(fn->code, dest, n->call.callee->thir->extern_function.index, nargs);
     } else {
@@ -473,7 +467,7 @@ unsigned lower_expression(Thir *n, Function *fn, Module *m) {
   }
   case THIR_UNARY: {
     unsigned v = lower_expression(n->unary.operand, fn, m);
-    unsigned dest = generate_temp(fn, n->type);
+    unsigned dest = generate_temp(fn);
     // We don't even have unary operators defined so nothing to do here
     EMIT_ADD(fn->code, dest, v, 0);
     return dest;
@@ -536,7 +530,7 @@ void lower_if(Thir *the_if, Function *fn, Module *m) {
 }
 
 void lower_variable(Thir *stmt, Function *fn, Module *m) {
-  unsigned slot = generate_temp(fn, stmt->type);
+  unsigned slot = generate_temp(fn);
   stmt->binding->index = slot;
   unsigned src = lower_expression(stmt->variable_initializer, fn, m);
   EMIT_STORE(fn->code, slot, src);
@@ -611,15 +605,15 @@ void lower_function(Thir *fnode, Module *m) {
     m->entry_point = fn;
   }
 
-  // TODO: do we want to do this? we could easily get overlapping indices,
-  // but I think everything's been resolved already?
   for (unsigned i = 0; i < fnode->function.parameters.length; ++i) {
     Binding *b = fnode->function.parameters.data[i];
     assert(b && "got invalid binding in parameter list while lowering");
     b->index = i;
   }
 
-  LIST_FOREACH(fnode->function.parameters, parameter) { generate_temp(fn, parameter->type); }
+  for (unsigned i = 0; i < fnode->function.parameters.length; ++i) {
+    generate_temp(fn);
+  }
 
   lower_block(fnode->function.block, fn, m);
 
@@ -627,8 +621,6 @@ void lower_function(Thir *fnode, Module *m) {
   if (fn->code.length == 0 || fn->code.data[fn->code.length - 1].op != OP_RET) {
     EMIT_RET(fn->code, 0);
   }
-
-  assert(fn->n_locals == fn->local_types.length && "local types didnt match the count of locals");
 
   push_function(m, fn);
 }
@@ -649,122 +641,84 @@ void lower_program(Thir *program, Module *m) {
   }
 }
 
-static void append_local_type(Function *fn, Module *m, String_Builder *sb, unsigned temp, unsigned array_length) {
-
-  if (fn->local_types.length <= temp) {
-    fprintf(stderr, "[IR] out of bounds access when getting local temp type len(%d) <= idx(%d)\n", fn->local_types.length,
-            temp);
-    exit(1);
-  }
-
-  int ty = fn->local_types.data[temp];
-  print_type_with_length(m->types.data[ty], sb, array_length);
-  sb_append(sb, " ");
-}
-
-void print_instr(Function *fn, Instr *i, String_Builder *sb, unsigned indent, Module *m) {
+void print_instr(Instr *i, String_Builder *sb, unsigned indent) {
   for (unsigned j = 0; j < indent; ++j) {
     sb_append(sb, " ");
   }
   switch (i->op) {
   case OP_ALLOCA:
-    append_local_type(fn, m, sb, i->a, i->c);
     sb_appendf(sb, "t%d = ALLOCA %d, %d", i->a, i->b, i->c);
     break;
   case OP_CONST:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = CONST c%d", i->a, i->b);
     break;
   case OP_LOAD:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = LOAD %d", i->a, i->b);
     break;
   case OP_MEMBER_LOAD:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = MEMBER_LOAD t%d, %d", i->a, i->b, i->c);
     break;
   case OP_ADD:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = ADD t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_SUB:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = SUB t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_MUL:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = MUL t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_DIV:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = DIV t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_MODULO:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = MODULO t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_SHIFT_LEFT:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = SHIFT_LEFT t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_SHIFT_RIGHT:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = SHIFT_RIGHT t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_BIT_AND:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = BIT_AND t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_BIT_OR:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = BIT_OR t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_XOR:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = XOR t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_EQUALS:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = EQUALS t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_NOT_EQUALS:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = NOT_EQUALS t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_LESS:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = LESS t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_GREATER:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = GREATER t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_LOGICAL_OR:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = LOGICAL_OR t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_LOGICAL_AND:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = LOGICAL_AND t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_NEGATE:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = NEGATE t%d", i->a, i->b);
     break;
   case OP_LOGICAL_NOT:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = LOGICAL_NOT t%d", i->a, i->b);
     break;
   case OP_BIT_NOT:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = BIT_NOT t%d", i->a, i->b);
     break;
   case OP_CALL:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = CALL %d, %d", i->a, i->b, i->c);
     break;
   case OP_CALL_EXTERN:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = CALL_EXTERN %d, %d", i->a, i->b, i->c);
     break;
   case OP_STORE:
@@ -789,7 +743,6 @@ void print_instr(Function *fn, Instr *i, String_Builder *sb, unsigned indent, Mo
     sb_appendf(sb, "JUMP_IF t%d, %d", i->a, i->b);
     break;
   case OP_MEMBER_LOAD_INDIRECT:
-    append_local_type(fn, m, sb, i->a, 0);
     sb_appendf(sb, "t%d = MEMBER_LOAD_INDIRECT t%d, t%d", i->a, i->b, i->c);
     break;
   case OP_MEMBER_STORE_INDIRECT:
@@ -867,7 +820,7 @@ void print_module(Module *m, String_Builder *sb) {
     print_type(function->type->returns, sb);
     sb_append(sb, ":\n");
     for (unsigned i = 0; i < function->code.length; ++i) {
-      print_instr(function, &function->code.data[i], sb, 2, m);
+      print_instr(&function->code.data[i], sb, 2);
       sb_append(sb, "\n");
     }
   }

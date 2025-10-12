@@ -29,6 +29,11 @@ typedef Binding *Binding_Ptr;
 DEFINE_LIST(Binding_Ptr)
 
 typedef struct {
+  struct Scope *next;
+  Binding_Ptr_list bindings; // TODO: rename to symbols.
+} Scope;
+
+typedef struct {
   Type *string_type;
   Type *integer_type;
   Type *bool_type;

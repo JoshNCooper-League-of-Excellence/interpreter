@@ -17,5 +17,8 @@ $(BIN): directories
 clean:
 	rm -rf $(BIN_DIR)
 
+test:
+	@./run_tests.sh
+
 run: all
 	./$(BIN)

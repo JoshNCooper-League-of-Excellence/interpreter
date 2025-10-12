@@ -88,12 +88,6 @@ typedef struct {
   unsigned n_locals;
   unsigned param_count;
   unsigned const_start;
-
-  struct {
-    int *data;
-    unsigned length, capacity;
-  } local_types;
-
 } Function;
 
 typedef struct {
