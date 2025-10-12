@@ -32,7 +32,6 @@ main :: () void {
   x int = 0;
   puts("loop start\n");
   for i int = 0; i < 100000; i += 1 {
-
   }
   puts("loop end\n");
 

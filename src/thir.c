@@ -105,6 +105,8 @@ Thir *type_function(Ast *ast, Context *c) {
   Thir *thir = thir_alloc(c, THIR_FUNCTION, ast->span);
   thir->function.name = ast->function.name;
 
+  Scope *old_scope = scope_add_child_and_enter(c);
+
   Type_Ptr_list argument_types = {0};
   thir->function.parameters =
       convert_ast_parameters_to_thir_parameters(c, ast->function.parameters, ast->span, &argument_types);
@@ -133,7 +135,7 @@ Thir *type_function(Ast *ast, Context *c) {
   c->typer_expected_type = thir->function.return_type;
   thir->function.block = type_block(ast->function.block, c);
   c->typer_expected_type = nullptr;
-
+  c->current_scope = old_scope;
   thir->type = (Type *)fty;
 
   // Fulfill binding instead of rebinding

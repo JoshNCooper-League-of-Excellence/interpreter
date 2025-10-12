@@ -6,7 +6,7 @@
       "name": "Launch",
       "program": "${workspaceFolder}/bin/compiler",
       "args": [
-        "main.b", "-o=main.ir"
+        "main.q", "-o=main.qir"
       ],
       "cwd": "${workspaceFolder}"
     }

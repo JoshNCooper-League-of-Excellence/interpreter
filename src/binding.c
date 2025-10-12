@@ -35,7 +35,9 @@ Binding_Ptr bind_variable(Context *context, Binding binding) {
     binding.ast->binding = ptr;
   }
 
-  LIST_PUSH(context->bindings, ptr);
+  
+  LIST_PUSH(context->current_scope->bindings, ptr);
+
   return ptr;
 }
 
@@ -55,7 +57,7 @@ Binding_Ptr bind_function(Context *context, Binding binding, bool is_extern) {
     binding.ast->binding = ptr;
   }
 
-  LIST_PUSH(context->bindings, ptr);
+  LIST_PUSH(context->current_scope->bindings, ptr);
   return ptr;
 }
 
@@ -90,6 +92,10 @@ void context_initialize(Context *context) {
   arena_init(&context->thir_arena, 1024 * 1024);
   arena_init(&context->type_arena, 1024 * 1024);
   arena_init(&context->binding_arena, 1024 * 1024);
+
+
+  context->file_scope = scope_create(context);
+  context->current_scope = context->file_scope;
 
   Type *integer_type = type_alloc(context);
   context->integer_type = integer_type;

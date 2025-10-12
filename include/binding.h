@@ -28,8 +28,8 @@ typedef Binding *Binding_Ptr;
 
 DEFINE_LIST(Binding_Ptr)
 
-typedef struct {
-  struct Scope *next;
+typedef struct Scope {
+  struct Scope *parent;
   Binding_Ptr_list bindings; // TODO: rename to symbols.
 } Scope;
 
@@ -41,7 +41,9 @@ typedef struct {
   Type *byte_type;
 
   Type_Ptr_list type_table;
-  Binding_Ptr_list bindings;
+
+  Scope *current_scope;
+  Scope *file_scope;
 
   unsigned variables, functions;
 
@@ -86,6 +88,19 @@ static inline bool try_find_function_type(Context *context, Type_Ptr_list parame
     return true;
   }
   return false;
+}
+
+static inline Scope *scope_create(Context *context) {
+  Scope *scope = (Scope *)arena_alloc(&context->binding_arena, sizeof(Scope));
+  return scope;
+}
+
+static inline Scope *scope_add_child_and_enter(Context *context) {
+  Scope *old = context->current_scope;
+  Scope *child = scope_create(context);
+  child->parent = context->current_scope;
+  context->current_scope = child;
+  return old;
 }
 
 Ast_Ptr ast_alloc(Context *context, int tag, Span span);

@@ -560,7 +560,7 @@ void lower_block(Thir *block, Function *fn, Module *m) {
         lower_expression(stmt->loop.update, fn, m);
       }
 
-      EMIT_JUMP(fn->code, loop_start - (fn->code.length + 1)); // jump back to loop start
+      EMIT_JUMP(fn->code, loop_start - fn->code.length); // jump back to loop start
 
       unsigned end_ip = fn->code.length;
       fn->code.data[jif_idx].b = body_start - (jif_idx + 1);     // patch JUMP_IF to body
