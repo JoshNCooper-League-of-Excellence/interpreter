@@ -2,9 +2,14 @@
   todo:
 
   [x] arena allocators 
+  [x] scope (non existent, we just use global bindings)
   [/] typed operands for ir (*we have some type information, but needs to be more like LLVM's -- type encoded operands for every instr*)
 
-  [] scope (non existent, we just use global bindings)
+  [] fix double free in Value when we make temps that are copies of structs.
+    double free -- we don't really track _WHO_ is the original owned pointer of a struct,
+    so when we create tempoaries that are copies of that struct for member access and such,
+    all of them get freed, and obviously that is bad.
+
   [] fix ownership of alloca's: when we return a struct literal it gets destroyed on return.
   
   [] add modules and importing

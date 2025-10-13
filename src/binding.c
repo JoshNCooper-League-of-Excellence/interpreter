@@ -45,7 +45,8 @@ Binding_Ptr bind_function(Context *context, Binding binding, bool is_extern) {
   Binding_Ptr ptr = arena_alloc(&context->binding_arena, sizeof(Binding));
   memcpy(ptr, &binding, sizeof(Binding));
 
-  if (!is_extern) { // extern functions have no associations
+  // extern functions have no index into this.
+  if (!is_extern) { 
     ptr->index = context->functions;
     context->functions++;
   }
@@ -53,6 +54,7 @@ Binding_Ptr bind_function(Context *context, Binding binding, bool is_extern) {
   if (binding.thir) {
     binding.thir->binding = ptr;
   }
+  
   if (binding.ast) {
     binding.ast->binding = ptr;
   }
@@ -125,62 +127,24 @@ void context_initialize(Context *context) {
   bool_type->tag = TYPE_BOOL;
 }
 
-Binding *get_binding(const char *identifier, Context *context) {
-  if (!identifier) {
-    fprintf(stderr, "error: null identifier in get_binding()\n");
+
+Binding *get_binding(const char *name, Context *c) {
+  if (!name || *name == '\0') {
+    fprintf(stderr, "error: null or empty identifier in get_binding()\n");
     exit(1);
   }
 
-  LIST_FOREACH(context->ast_list, ast) {
-    if (!ast->binding) {
-      continue;
-    }
-    if (ast->tag == AST_VARIABLE) {
-      if (strcmp(ast->variable.name, identifier) == 0) {
-        return ast->binding;
-      }
-    } else if (ast->tag == AST_FUNCTION) {
-      if (strcmp(ast->function.name, identifier) == 0) {
-        return ast->binding;
+  Scope *scope = c->current_scope;
+
+  while (scope) {
+    LIST_FOREACH(scope->bindings, binding) {
+      if (strcmp(binding->name, name) == 0) {
+        return binding;
       }
     }
+    scope = scope->parent;
   }
 
-  LIST_FOREACH(context->thir_list, thir) {
-    if (!thir->binding) {
-      continue;
-    }
-
-    switch (thir->tag) {
-    case THIR_VARIABLE:
-      if (strcmp(thir->binding->name, identifier) == 0) {
-        return thir->binding;
-      }
-      break;
-    case THIR_FUNCTION:
-      if (strcmp(thir->function.name, identifier) == 0) {
-        return thir->binding;
-      }
-      break;
-    case THIR_EXTERN:
-      if (strcmp(thir->extern_function.name, identifier) == 0) {
-        return thir->binding;
-      }
-      break;
-      break;
-    default:
-      break;
-    }
-  }
-
-  LIST_FOREACH(context->type_table, type) {
-    if (!type->binding) {
-      continue;
-    }
-    if (strcmp(type->name, identifier) == 0) {
-      return type->binding;
-    }
-  }
 
   return nullptr;
 }

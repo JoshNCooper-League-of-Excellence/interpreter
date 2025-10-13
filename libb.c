@@ -17,3 +17,38 @@ void assert(int value, const char *message) {
     exit(1);
   }
 }
+
+void assert_eqi(int a, int b, const char *message) {
+  if (a != b) {
+    fprintf(stderr, "assertion failed: (%d != %d) '%s'\n", a, b, message);
+    exit(1);
+  }
+}
+
+void assert_eqp(void *a, void *b, const char *message) {
+  if (a != b) {
+    fprintf(stderr, "assertion failed: (%p != %p) '%s'\n", a, b, message);
+    exit(1);
+  }
+}
+
+void assert_eqs(const char *a, const char *b, const char *message) {
+  if (a != b) {
+    fprintf(stderr, "assertion failed: (%s != %s) '%s'\n", a, b, message);
+    exit(1);
+  }
+}
+
+typedef struct {
+  int a, b;
+} eqipair;
+
+void assert_alltrue(eqipair *eqs, int len, const char *message) {
+  for (int i = 0; i < len; ++i) {
+    eqipair pair = eqs[i];
+    if (pair.a != pair.b) {
+      fprintf(stderr, "assertion failed: (%d != %d) '%s'\n", pair.a, pair.b, message);
+      exit(1);
+    }
+  }
+}

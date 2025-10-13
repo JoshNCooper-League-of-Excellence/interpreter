@@ -1,5 +1,4 @@
 extern assert :: (int, byte*) void;
-extern puts :: (byte*) void;
 
 main :: () void {
   a int = 10;

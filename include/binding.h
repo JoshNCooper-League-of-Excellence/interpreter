@@ -95,7 +95,7 @@ static inline Scope *scope_create(Context *context) {
   return scope;
 }
 
-static inline Scope *scope_add_child_and_enter(Context *context) {
+static inline Scope *scope_enter_new_child_and_return_previous(Context *context) {
   Scope *old = context->current_scope;
   Scope *child = scope_create(context);
   child->parent = context->current_scope;

@@ -15,10 +15,16 @@ $(BIN): directories
 	$(CC) $(CFLAGS) -o $(BIN) $(SRCS) $(LD_FLAGS)
 
 clean:
-	rm -rf $(BIN_DIR)
+	@rm -rf $(BIN_DIR)
 
-test:
-	@./run_tests.sh
+test: all
+	@cd tests; \
+	for file in ./*; do \
+		../bin/compiler "$$file"; \
+		if [ $$? -eq 0 ]; then \
+			echo -e "\033[1;32m$$file passed\033[0m"; \
+		fi; \
+	done
 
 run: all
 	./$(BIN)

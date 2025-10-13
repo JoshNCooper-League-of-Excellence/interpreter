@@ -105,7 +105,7 @@ Thir *type_function(Ast *ast, Context *c) {
   Thir *thir = thir_alloc(c, THIR_FUNCTION, ast->span);
   thir->function.name = ast->function.name;
 
-  Scope *old_scope = scope_add_child_and_enter(c);
+  Scope *old_scope = scope_enter_new_child_and_return_previous(c);
 
   Type_Ptr_list argument_types = {0};
   thir->function.parameters =
@@ -144,12 +144,7 @@ Thir *type_function(Ast *ast, Context *c) {
     existing->type = (Type *)fty;
     existing->ast = ast;
   } else {
-    Binding b = {0};
-    b.ast = ast;
-    b.thir = thir;
-    b.name = ast->function.name;
-    b.type = (Type *)fty;
-    bind_function(c, b, false);
+    assert(false && "[THIR] function should have already been bound by now");
   }
 
   return thir;
@@ -191,12 +186,13 @@ Thir *type_extern(Ast *ast, Context *c) {
 
   thir->type = (Type *)fty;
   
-  Binding b = {0};
-  b.ast = ast;
-  b.thir = thir;
-  b.name = name;
-  b.type = (Type *)fty;
-  bind_function(c, b, true);
+  if (existing && !existing->thir) {
+    existing->thir = thir;
+    thir->binding = existing;
+  } else {
+    assert(false && "[THIR] extern should have already been bound by now");
+  }
+
 
   Extern_Function ffi_function = get_ffi_function_from_thir(thir);
   thir->extern_function.index = ffi_function.index;
@@ -292,6 +288,8 @@ Thir *type_for(Ast *ast, Context *c) {
 Thir *type_block(Ast *ast, Context *c) {
   Thir *block = thir_alloc(c, THIR_BLOCK, ast->span);
 
+  Scope *old_scope = scope_enter_new_child_and_return_previous(c);
+
   Thir_Ptr_list statements = {0};
   LIST_FOREACH(ast->block, statement) {
     switch (statement->tag) {
@@ -327,7 +325,7 @@ Thir *type_block(Ast *ast, Context *c) {
     }
   }
   block->block = statements;
-
+  c->current_scope = old_scope;
   return block;
 }
 
@@ -758,7 +756,6 @@ Binding_Ptr_list convert_ast_parameters_to_thir_parameters(Context *context, Par
     Binding_Ptr ptr = bind_variable(context, binding);
     thir_param->binding = ptr;
     thir_param->type = param_type;
-
     LIST_PTR_PUSH(argument_types, param_type);
     LIST_PUSH(bindings, ptr);
   }
