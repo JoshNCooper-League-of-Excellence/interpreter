@@ -20,7 +20,9 @@ main :: () void {
   assert(false, "todo(fix double free bug, which occurs at the exit of this block. see main.q todo's)");
 }
 
-fn_returns_struct :: () Vec2 {
+// this always fails because we don't have shadow out parameters, nor do
+// we manage the lifetime of this alloca, so it just gets destroyed when this block exits.
+fn_returns_struct :: () Vec2 { 
   return { 10, 10 };
 }
 
