@@ -1,6 +1,7 @@
 #ifndef LEXER_H
 #define LEXER_H
 
+#include <linux/limits.h>
 #define _GNU_SOURCE
 #ifndef __USE_MISC
 #define __USE_MISC
@@ -132,7 +133,7 @@ typedef struct {
   size_t line, col, length, start;
 } Span;
 
-extern const char *CURRENTLY_COMPILING_FILE_NAME;
+extern char CURRENTLY_COMPILING_FILE_NAME[PATH_MAX];
 
 static inline char *lexer_span_to_string(Span span) {
   char *buffer = malloc(64);

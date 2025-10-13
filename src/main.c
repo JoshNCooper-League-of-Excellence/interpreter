@@ -1,21 +1,25 @@
+#include <linux/limits.h>
+#define _GNU_SOURCE
+
 #include "ast.h"
 #include "binding.h"
+#include "ir.h"
 #include "lexer.h"
 #include "parser.h"
 #include "string_builder.h"
-#include "ir.h"
 #include "thir.h"
 #include "vm.h"
+#include <limits.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-const char *CURRENTLY_COMPILING_FILE_NAME = "<no filename>";
+char CURRENTLY_COMPILING_FILE_NAME[PATH_MAX];
+
 Extern_Function_list CACHED_EXTERNS;
-
-bool LOG_IR = false;
-
 Cmd_Line_Args COMMAND_LINE_ARGUMENTS;
-
+bool LOG_IR = false;
 
 int main(int argc, char *argv[]) {
   if (argc == 1) {
@@ -23,6 +27,9 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
+  realpath(argv[1], CURRENTLY_COMPILING_FILE_NAME);
+  
+  CACHED_EXTERNS = (Extern_Function_list){0};
   COMMAND_LINE_ARGUMENTS = (Cmd_Line_Args){.argc = argc - 1, .argv = argv + 1};
 
   const char *output_path = nullptr;
@@ -35,22 +42,17 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  CACHED_EXTERNS = (Extern_Function_list){0};
-
   Context context = {0};
   context_initialize(&context);
 
-  const char *filename = argv[1];
-  CURRENTLY_COMPILING_FILE_NAME = filename;
-
-  Ast *ast_program = parse_file(filename, &context);
+  Ast *ast_program = parse_file(CURRENTLY_COMPILING_FILE_NAME, &context);
   if (!ast_program) {
     fprintf(stderr, "no ast returned from parser\n");
     return 1;
   }
 
   if (ast_program->tag == AST_ERROR) {
-    fprintf(stderr, "%s at %s:%zu:%zu\n", ast_program->error.message, filename, ast_program->span.line,
+    fprintf(stderr, "%s at %s:%zu:%zu\n", ast_program->error.message, CURRENTLY_COMPILING_FILE_NAME, ast_program->span.line,
             ast_program->span.col);
     return 1;
   }

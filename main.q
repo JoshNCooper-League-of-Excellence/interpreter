@@ -1,5 +1,4 @@
 /*  TODO: 
-
   [x] arena allocators 
   [x] scope (non existent, we just use global bindings)
 
@@ -15,14 +14,13 @@
 
   [] fix ownership of alloca's: when we return a struct literal it gets destroyed on return.
   
-  [] be able to manipulate unmanaged pointers with non-extern code
-  [] be able to take non-array managed pointers
+  [] be able to manipulate unmanaged pointers with native code
+  [] be able to take non-array managed pointers with native code.
 
   [] improve ffi for structs, actual argument and return value marshalling
-
   [] either sized arrays or get rid of arrays
+  
   [] string literals of 'string' type (fat pointer), not raw byte*
-
 */
 
 /*  Features:
