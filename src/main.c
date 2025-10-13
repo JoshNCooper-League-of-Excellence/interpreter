@@ -59,7 +59,8 @@ int main(int argc, char *argv[]) {
 
   Module module = {0};
   module_init(&module, &context);
-  lower_program(typed_program, &module);
+  IR_Context ir_context = {0};
+  lower_program(typed_program, &module, &ir_context);
 
   if (LOG_IR || output_path) {
     String_Builder sb = {0};

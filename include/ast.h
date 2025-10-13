@@ -68,6 +68,14 @@ typedef enum {
   OPERATOR_INDEX,
 } Operator;
 
+// TODO: handle return here too, so analyzing control flow is easier.
+// TODO: add exhaustive control flow analysis, function must return, etc etc.
+typedef enum {
+  CF_BREAK,
+  CF_CONTINUE,
+  CF_GOTO,
+} Control_Flow_Tag;
+
 static inline const char *operator_to_string(Operator op) {
   switch (op) {
   case OPERATOR_NONE:
@@ -171,6 +179,13 @@ typedef enum {
 
   AST_BLOCK,
   AST_RETURN,
+
+  AST_CONTROL_FLOW_CHANGE,
+
+  // TODO:
+  // AST_GOTO,
+  // AST_LABEL,
+
   AST_VARIABLE,
   AST_CALL,
   AST_EXTERN,
@@ -211,6 +226,11 @@ typedef struct Ast {
     Ast_Ptr_list program;
     Ast_Ptr_list block;
     struct Ast *return_value;
+
+    struct {
+      const char *label;
+      Control_Flow_Tag tag;
+    } control_flow_change;
 
     struct {
       struct Ast *init;
@@ -302,7 +322,6 @@ typedef struct Ast {
 
 } Ast;
 
-
 // used to maintain homogenous aggregate initializers, only key values, or only
 // values. no mixing the kinds
 #define AGGREGATE_INITIALIZER_SET_CHECK_PARSING_KEY_VALUES(parsing_flag)                                                    \
@@ -311,7 +330,7 @@ typedef struct Ast {
       parsing_only_values = (parsing_flag);                                                                                 \
       set = true;                                                                                                           \
     } else if ((parsing_only_values) != (parsing_flag)) {                                                                   \
-      return parser_error(context, span,                                                                                    \
+      return parser_error(c, span,                                                                                          \
                           "aggregate initializers can only contain all "                                                    \
                           "values, or all key-value pairs.");                                                               \
     }                                                                                                                       \

@@ -1,6 +1,7 @@
 #include "ir.h"
 #include "ast.h"
 #include "binding.h"
+#include "core.h"
 #include "lexer.h"
 #include "list.h"
 #include "string_builder.h"
@@ -159,7 +160,7 @@ int lower_member_rvalue(Thir *n, Function *fn, Module *m) {
 }
 
 // n is a binary INDEX node
-static unsigned lower_index_rvalue(Thir *n, Function *fn, Module *m) {
+unsigned lower_index_rvalue(Thir *n, Function *fn, Module *m) {
   Thir *base = n->binary.left;
 
   unsigned obj;
@@ -177,7 +178,7 @@ static unsigned lower_index_rvalue(Thir *n, Function *fn, Module *m) {
 }
 
 // arr[i] = rhs (root must be a variable)
-static unsigned lower_index_assignment(Thir *lhs, unsigned rhs, Function *fn, Module *m) {
+unsigned lower_index_assignment(Thir *lhs, unsigned rhs, Function *fn, Module *m) {
   Thir *base = lhs->binary.left;
   assert(base->tag == THIR_VARIABLE && "assignment to non-lvalue index base");
 
@@ -479,8 +480,7 @@ unsigned lower_expression(Thir *n, Function *fn, Module *m) {
   }
 }
 
-// Written by chatgpt cause im too stupid to do this
-void lower_if(Thir *the_if, Function *fn, Module *m) {
+void lower_if(Thir *the_if, Function *fn, Module *m, IR_Context *c) {
   unsigned cond = lower_expression(the_if->$if.condition, fn, m);
 
   // No else: need a guard jump to skip the then-block when cond is false.
@@ -494,7 +494,7 @@ void lower_if(Thir *the_if, Function *fn, Module *m) {
     unsigned then_start = (unsigned)fn->code.length;
     fn->code.data[jif_idx].b = then_start - (jif_idx + 1); // patch to then
 
-    lower_block(the_if->$if.then_block, fn, m);
+    lower_block(the_if->$if.then_block, fn, m, c);
 
     unsigned end_ip = (unsigned)fn->code.length;
     fn->code.data[jmp_end_idx].a = end_ip - (jmp_end_idx + 1); // patch to end
@@ -512,9 +512,9 @@ void lower_if(Thir *the_if, Function *fn, Module *m) {
   EMIT_JUMP_IF(fn->code, cond, 0); // patch to then-start
 
   if (the_if->$if.else_block->tag == THIR_IF) {
-    lower_if(the_if->$if.else_block, fn, m);
+    lower_if(the_if->$if.else_block, fn, m, c);
   } else {
-    lower_block(the_if->$if.else_block, fn, m);
+    lower_block(the_if->$if.else_block, fn, m, c);
   }
 
   unsigned jmp_end_idx = (unsigned)fn->code.length;
@@ -523,7 +523,7 @@ void lower_if(Thir *the_if, Function *fn, Module *m) {
   unsigned then_start = (unsigned)fn->code.length;
   fn->code.data[jif_idx].b = then_start - (jif_idx + 1); // to then
 
-  lower_block(the_if->$if.then_block, fn, m);
+  lower_block(the_if->$if.then_block, fn, m, c);
 
   unsigned end_ip = (unsigned)fn->code.length;
   fn->code.data[jmp_end_idx].a = end_ip - (jmp_end_idx + 1); // to end
@@ -536,63 +536,125 @@ void lower_variable(Thir *stmt, Function *fn, Module *m) {
   EMIT_STORE(fn->code, slot, src);
 }
 
-void lower_block(Thir *block, Function *fn, Module *m) {
-  LIST_FOREACH(block->block, stmt) {
-    switch (stmt->tag) {
-    case THIR_LOOP: {
-      // Combined loop lowering for both for and while
-      if (stmt->loop.init) {
-        lower_variable(stmt->loop.init, fn, m);
-      }
-
-      unsigned loop_start = fn->code.length;
-      unsigned cond = lower_expression(stmt->loop.condition, fn, m);
-      unsigned jif_idx = fn->code.length;
-      EMIT_JUMP_IF(fn->code, cond, 0); // jump to body if true
-
-      unsigned jmp_end_idx = fn->code.length;
-      EMIT_JUMP(fn->code, 0); // jump to end if false
-
-      unsigned body_start = fn->code.length;
-      lower_block(stmt->loop.block, fn, m);
-
-      if (stmt->loop.update) {
-        lower_expression(stmt->loop.update, fn, m);
-      }
-
-      EMIT_JUMP(fn->code, loop_start - fn->code.length); // jump back to loop start
-
-      unsigned end_ip = fn->code.length;
-      fn->code.data[jif_idx].b = body_start - (jif_idx + 1);     // patch JUMP_IF to body
-      fn->code.data[jmp_end_idx].a = end_ip - (jmp_end_idx + 1); // patch JUMP to end
-    } break;
-    case THIR_IF: {
-      lower_if(stmt, fn, m);
-    } break;
-    case THIR_RETURN: {
-      if (stmt->return_value) {
-        unsigned tmp = lower_expression(stmt->return_value, fn, m);
-        EMIT_RET(fn->code, tmp);
-      } else {
-        EMIT_RET(fn->code, -1);
-      }
-    } break;
-    case THIR_VARIABLE: {
-      lower_variable(stmt, fn, m);
-    } break;
-    case THIR_BINARY:
-    case THIR_CALL:
-    case THIR_LITERAL:
-      lower_expression(stmt, fn, m);
-      break;
-    default: {
-      assert(false && "unexpected THIR node in block while lowering");
-    } break;
-    }
+void lower_control_flow_change(Thir *stmt, Function *fn, IR_Context *c) {
+  switch (stmt->control_flow_change.tag) {
+  case CF_BREAK:
+    c->break_patches[(*c->break_patches_length)++] = fn->code.length;
+    EMIT_JUMP(fn->code, 0);
+    break;
+  case CF_CONTINUE:
+    c->cont_patches[(*c->cont_patches_length)++] = fn->code.length;
+    EMIT_JUMP(fn->code, 0);
+    break;
+  case CF_GOTO:
+    TODO("goto not yet implemented")
+    break;
   }
 }
 
-void lower_function(Thir *fnode, Module *m) {
+void lower_loop(Thir *stmt, Function *fn, Module *m, IR_Context *c) {
+  if (stmt->loop.init) {
+    lower_variable(stmt->loop.init, fn, m);
+  }
+
+  unsigned loop_start = fn->code.length;
+  unsigned cond = lower_expression(stmt->loop.condition, fn, m);
+  unsigned jif_idx = fn->code.length;
+  EMIT_JUMP_IF(fn->code, cond, 0); // jump to body if true
+
+  unsigned jmp_end_idx = fn->code.length;
+  EMIT_JUMP(fn->code, 0); // jump to end if false
+
+  unsigned body_start = fn->code.length;
+
+  // clang-format off
+  unsigned *old_breaks = c->break_patches, 
+           *old_conts = c->cont_patches, 
+            *old_breaks_length = c->break_patches_length,
+            *old_conts_length = c->cont_patches_length;
+  // clang-format on
+
+  // TODO: this shouldn't be fixed. should use a unsigned_list struct { unsigned *data,
+  // length, capacity; } list; with list library
+  
+  unsigned break_patch_list[256];
+  unsigned cont_patch_list[256];
+  unsigned break_count = 0, cont_count = 0;
+
+  c->break_patches = break_patch_list;
+  c->cont_patches = cont_patch_list;
+  c->cont_patches_length = &cont_count;
+  c->break_patches_length = &break_count;
+
+  lower_block(stmt->loop.block, fn, m, c);
+
+  unsigned update_start = fn->code.length;
+  if (stmt->loop.update) {
+    lower_expression(stmt->loop.update, fn, m);
+  }
+
+  EMIT_JUMP(fn->code, loop_start - fn->code.length); // jump back to loop start
+
+  unsigned end_ip = fn->code.length;
+
+  for (unsigned i = 0; i < cont_count; ++i) {
+    unsigned patch_idx = cont_patch_list[i];
+    fn->code.data[patch_idx].a = update_start - (patch_idx + 1);
+  }
+
+  for (unsigned i = 0; i < break_count; ++i) {
+    unsigned patch_idx = break_patch_list[i];
+    fn->code.data[patch_idx].a = end_ip - (patch_idx + 1);
+  }
+
+  fn->code.data[jif_idx].b = body_start - (jif_idx + 1);     // patch JUMP_IF to body
+  fn->code.data[jmp_end_idx].a = end_ip - (jmp_end_idx + 1); // patch JUMP to end
+
+  // reset previous state.
+  c->break_patches = old_breaks;
+  c->break_patches_length = old_breaks_length;
+  c->cont_patches = old_conts;
+  c->cont_patches_length = old_conts_length;
+}
+
+void lower_stmt(Thir *stmt, Function *fn, Module *m, IR_Context *c) {
+  switch (stmt->tag) {
+  case THIR_CONTROL_FLOW_CHANGE:
+    lower_control_flow_change(stmt, fn, c);
+    break;
+  case THIR_LOOP: {
+    lower_loop(stmt, fn, m, c);
+  } break;
+  case THIR_IF: {
+    lower_if(stmt, fn, m, c);
+  } break;
+  case THIR_RETURN: {
+    if (stmt->return_value) {
+      unsigned tmp = lower_expression(stmt->return_value, fn, m);
+      EMIT_RET(fn->code, tmp);
+    } else {
+      EMIT_RET(fn->code, -1);
+    }
+  } break;
+  case THIR_VARIABLE: {
+    lower_variable(stmt, fn, m);
+  } break;
+  case THIR_BINARY:
+  case THIR_CALL:
+  case THIR_LITERAL:
+    lower_expression(stmt, fn, m);
+    break;
+  default: {
+    assert(false && "unexpected THIR node in block while lowering");
+  } break;
+  }
+}
+
+void lower_block(Thir *block, Function *fn, Module *m, IR_Context *c) {
+  LIST_FOREACH(block->block, stmt) { lower_stmt(stmt, fn, m, c); }
+}
+
+void lower_function(Thir *fnode, Module *m, IR_Context *c) {
   assert(fnode && fnode->tag == THIR_FUNCTION && "lower_function: got non function node");
   Function *fn = calloc(1, sizeof(Function));
   fn->type = (Function_Type *)fnode->type;
@@ -615,7 +677,7 @@ void lower_function(Thir *fnode, Module *m) {
     generate_temp(fn);
   }
 
-  lower_block(fnode->function.block, fn, m);
+  lower_block(fnode->function.block, fn, m, c);
 
   // ensure we always return
   if (fn->code.length == 0 || fn->code.data[fn->code.length - 1].op != OP_RET) {
@@ -625,7 +687,7 @@ void lower_function(Thir *fnode, Module *m) {
   push_function(m, fn);
 }
 
-void lower_program(Thir *program, Module *m) {
+void lower_program(Thir *program, Module *m, IR_Context *c) {
   assert(program && program->tag == THIR_PROGRAM && "unexpected node while lowering, expected THIR_PROGRAM");
 
   LIST_INIT(m->functions);
@@ -636,7 +698,7 @@ void lower_program(Thir *program, Module *m) {
       continue; // We just ignore it.
     } else {
       assert(f->tag == THIR_FUNCTION && "unexpected node type while lowering. expected THIR_FUNCTION");
-      lower_function(f, m);
+      lower_function(f, m, c);
     }
   }
 }

@@ -83,7 +83,7 @@ typedef struct {
 typedef struct {
   const char *name;
   Function_Type *type;
-  
+
   Instr_Buffer code;
   unsigned n_locals;
   unsigned param_count;
@@ -103,6 +103,10 @@ typedef struct {
   Extern_Function_list externs;
   Type_Ptr_list types;
 } Module;
+
+typedef struct {
+  unsigned *break_patches, *cont_patches, *break_patches_length, *cont_patches_length;
+} IR_Context;
 
 void module_init(Module *m, Context *context);
 
@@ -188,13 +192,29 @@ void module_init(Module *m, Context *context);
 
 #define EMIT_JUMP(buf, target) EMIT(buf, MAKE_INSTR1(OP_JUMP, (target)))
 
+unsigned add_constant(Module *m, Thir *thir);
+unsigned push_function(Module *m, Function *f);
+unsigned generate_temp(Function *fn);
+int collect_member_path(Thir *n, int leaf_to_root[], int max_depth, Thir **out_base);
+int lower_member_rvalue(Thir *n, Function *fn, Module *m);
+unsigned lower_index_rvalue(Thir *n, Function *fn, Module *m);
+unsigned lower_index_assignment(Thir *lhs, unsigned rhs, Function *fn, Module *m);
+unsigned lower_member_assignment(Thir *lhs, unsigned rhs, Function *fn);
+unsigned lower_get_lvalue(Thir *lhs, Function *fn, Module *m);
+unsigned lower_lvalue_slot(Thir *n);
 unsigned lower_expression(Thir *n, Function *fn, Module *m);
-void lower_block(Thir *block, Function *fn, Module *m);
-void lower_program(Thir *program, Module *m);
-void lower_function(Thir *node, Module *m);
-
+void lower_set_lvalue(Thir *lhs, unsigned value, Function *fn, Module *m);
+void lower_if(Thir *the_if, Function *fn, Module *m, IR_Context *c);
+void lower_variable(Thir *stmt, Function *fn, Module *m);
+void lower_block(Thir *block, Function *fn, Module *m, IR_Context *c);
+void lower_function(Thir *fnode, Module *m, IR_Context *c);
+void lower_program(Thir *program, Module *m, IR_Context *c);
+void lower_control_flow_change(Thir *stmt, Function *fn, IR_Context *c);
+void lower_stmt(Thir *stmt, Function *fn, Module *m, IR_Context *c);
+void lower_loop(Thir *stmt, Function *fn, Module *m, IR_Context *c);
 #include "string_builder.h"
 
 void print_module(Module *m, String_Builder *sb);
+void print_instr(Instr *i, String_Builder *sb, unsigned indent);
 
 #endif

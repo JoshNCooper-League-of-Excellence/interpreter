@@ -185,14 +185,13 @@ Thir *type_extern(Ast *ast, Context *c) {
   }
 
   thir->type = (Type *)fty;
-  
+
   if (existing && !existing->thir) {
     existing->thir = thir;
     thir->binding = existing;
   } else {
     assert(false && "[THIR] extern should have already been bound by now");
   }
-
 
   Extern_Function ffi_function = get_ffi_function_from_thir(thir);
   thir->extern_function.index = ffi_function.index;
@@ -285,46 +284,56 @@ Thir *type_for(Ast *ast, Context *c) {
   loop->loop.block = block;
   return loop;
 }
+
+Thir *type_control_flow_change(Ast *ast, Context *c) {
+  Thir *thir = thir_alloc(c, THIR_CONTROL_FLOW_CHANGE, ast->span);
+  thir->control_flow_change.tag = ast->control_flow_change.tag;
+  return thir;
+}
+
 Thir *type_block(Ast *ast, Context *c) {
   Thir *block = thir_alloc(c, THIR_BLOCK, ast->span);
 
   Scope *old_scope = scope_enter_new_child_and_return_previous(c);
 
-  Thir_Ptr_list statements = {0};
-  LIST_FOREACH(ast->block, statement) {
-    switch (statement->tag) {
+  Thir_Ptr_list stmts = {0};
+  LIST_FOREACH(ast->block, stmt) {
+    switch (stmt->tag) {
     case AST_ERROR:
-      report_error(statement);
+      report_error(stmt);
+    case AST_CONTROL_FLOW_CHANGE:
+      LIST_PUSH(stmts, type_control_flow_change(stmt, c));
+      break;
     case AST_FOR:
-      LIST_PUSH(statements, type_for(statement, c));
+      LIST_PUSH(stmts, type_for(stmt, c));
       break;
     case AST_WHILE:
-      LIST_PUSH(statements, type_while(statement, c));
+      LIST_PUSH(stmts, type_while(stmt, c));
       break;
     case AST_IF:
-      LIST_PUSH(statements, type_if(statement, c));
+      LIST_PUSH(stmts, type_if(stmt, c));
       break;
     case AST_CALL:
-      LIST_PUSH(statements, type_call(statement, c));
+      LIST_PUSH(stmts, type_call(stmt, c));
       break;
     case AST_UNARY:
-      LIST_PUSH(statements, type_unary(statement, c));
+      LIST_PUSH(stmts, type_unary(stmt, c));
       break;
     case AST_BINARY:
-      LIST_PUSH(statements, type_binary(statement, c));
+      LIST_PUSH(stmts, type_binary(stmt, c));
       break;
     case AST_RETURN:
-      LIST_PUSH(statements, type_return(statement, c));
+      LIST_PUSH(stmts, type_return(stmt, c));
       break;
     case AST_VARIABLE:
-      LIST_PUSH(statements, type_variable(statement, c));
+      LIST_PUSH(stmts, type_variable(stmt, c));
       break;
     default:
-      fprintf(stderr, "unexpected statement type in block: %d at: %s\n", statement->tag, lexer_span_to_string(ast->span));
+      fprintf(stderr, "unexpected statement type in block: %d at: %s\n", stmt->tag, lexer_span_to_string(ast->span));
       exit(1);
     }
   }
-  block->block = statements;
+  block->block = stmts;
   c->current_scope = old_scope;
   return block;
 }

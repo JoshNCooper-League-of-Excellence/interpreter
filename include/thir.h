@@ -22,6 +22,7 @@ typedef enum {
   THIR_MEMBER_ACCESS,
   THIR_IF,
   THIR_LOOP,
+  THIR_CONTROL_FLOW_CHANGE,
 } Thir_Tag;
 
 #include "ffi.h"
@@ -52,6 +53,12 @@ typedef struct Thir {
   union {
     Thir_Ptr_list program;
     Thir_Ptr_list block;
+
+    struct {
+      Control_Flow_Tag tag;
+      // TODO: add a THIR node for labels, and store a ref to the label here (or a binding to it)
+      // so goto/continue/break can jump to labels.
+    } control_flow_change;
 
     // Both while and for use this.
     // while just doesn't use the initializer nor increment
