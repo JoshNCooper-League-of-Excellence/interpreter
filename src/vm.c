@@ -11,11 +11,11 @@
 typedef signed long long integer;
 
 #define VM_ERRF(msg, ...)                                                                                                   \
-  fprintf(stderr, "[VM:ERROR]: " msg "\n" __VA_OPT__(, ) __VA_ARGS__);                                                            \
+  fprintf(stderr, "[VM:ERROR]: " msg "\n" __VA_OPT__(, ) __VA_ARGS__);                                                      \
   exit(1);
 
 #define VM_EXITF(msg, ...)                                                                                                  \
-  fprintf(stderr, "[VM:EXIT]: " msg "\n" __VA_OPT__(, ) __VA_ARGS__);                                                          \
+  fprintf(stderr, "[VM:EXIT]: " msg "\n" __VA_OPT__(, ) __VA_ARGS__);                                                       \
   exit(EXIT_SUCCESS);
 
 static inline Stack_Frame enter(Function *fn, integer ret_dest, integer caller) {
@@ -138,6 +138,7 @@ void vm_execute(Module *m) {
       signed ty_idx = instr.b;
       signed length = instr.c;
       Type *type = m->types.data[ty_idx];
+      // no copy
       if (length == 0) {
         sf->locals[dest] = default_value_of_type(type, sf->uid);
       } else {
@@ -154,11 +155,11 @@ void vm_execute(Module *m) {
 
       Value *val = &sf->locals[src];
       if (val->tag == VALUE_STRUCT) {
-        sf->locals[dest] = val->$struct.members[idx];
+        sf->locals[dest] = vcopy(val->$struct.members[idx]);
       } else if (val->tag == VALUE_POINTER) {
         if (val->pointer.pointee == POINTEE_VALUE) {
           Value *elements = val->pointer.elements;
-          sf->locals[dest] = elements[idx];
+          sf->locals[dest] = vcopy(elements[idx]);
         } else {
           VM_ERRF("OP_MEMBER_LOAD not supported for unmanged pointers or arrays yet");
         }
@@ -173,11 +174,10 @@ void vm_execute(Module *m) {
       signed idx = instr.c;
       Value *val = &sf->locals[src];
       if (val->tag == VALUE_STRUCT) {
-        sf->locals[dest] = val->$struct.members[idx];
+        sf->locals[dest] = vcopy(val->$struct.members[idx]);
       } else if (val->tag == VALUE_POINTER) {
         if (val->pointer.pointee == POINTEE_VALUE) {
-          Value *elements = val->pointer.elements;
-          sf->locals[dest] = elements[idx];
+          sf->locals[dest] = vcopy(((Value *)val->pointer.elements)[idx]);
         } else {
           VM_ERRF("OP_MEMBER_LOAD not supported for unmanged pointers or arrays yet");
         }
@@ -192,10 +192,12 @@ void vm_execute(Module *m) {
       signed src = instr.c;
       Value *val = &sf->locals[struct_slot];
       if (val->tag == VALUE_STRUCT) {
-        val->$struct.members[member_idx] = sf->locals[src];
+        vfree(&val->$struct.members[member_idx], sf->uid);
+        val->$struct.members[member_idx] = vcopy(sf->locals[src]);
       } else if (val->tag == VALUE_POINTER) {
         if (val->pointer.pointee == POINTEE_VALUE) {
-          ((Value *)val->pointer.elements)[member_idx] = sf->locals[src];
+          vfree((&((Value *)val->pointer.elements)[member_idx]), sf->uid);
+          ((Value *)val->pointer.elements)[member_idx] = vcopy(sf->locals[src]);
         } else {
           VM_ERRF("OP_MEMBER_STORE not supported for unmanged pointers or arrays yet");
         }
@@ -211,14 +213,17 @@ void vm_execute(Module *m) {
       integer index = sf->locals[ptr].integer;
 
       if (val->tag == VALUE_STRUCT) {
-        val->$struct.members[index] = sf->locals[src];
+        vfree(&val->$struct.members[index], sf->uid);
+        val->$struct.members[index] = vcopy(sf->locals[src]);
       } else if (val->tag == VALUE_POINTER) {
         if (val->pointer.pointee == POINTEE_VALUE) {
-          ((Value *)val->pointer.elements)[index] = sf->locals[src];
+          vfree(&((Value *)val->pointer.elements)[index], sf->uid);
+          ((Value *)val->pointer.elements)[index] = vcopy(sf->locals[src]);
         } else {
           VM_ERRF("OP_MEMBER_STORE not supported for unmanged pointers or arrays yet");
         }
       }
+
       continue;
     }
 
@@ -232,14 +237,16 @@ void vm_execute(Module *m) {
     case OP_LOAD: {
       signed dest = instr.a;
       signed slot = instr.b;
-      sf->locals[dest] = sf->locals[slot];
+      vfree(&sf->locals[dest], sf->uid);
+      sf->locals[dest] = vcopy(sf->locals[slot]);
       continue;
     }
 
     case OP_STORE: {
       signed slot = instr.a;
       signed src = instr.b;
-      sf->locals[slot] = sf->locals[src];
+      vfree(&sf->locals[slot], sf->uid);
+      sf->locals[slot] = vcopy(sf->locals[src]);
       continue;
     }
 
@@ -331,7 +338,6 @@ void vm_execute(Module *m) {
       arg_p = base; // pop args
       sp = new_sp;
       sf = &call_stack[sp];
-
       continue;
     }
 
@@ -339,7 +345,7 @@ void vm_execute(Module *m) {
       signed src = instr.a;
       Value rv = {.tag = VALUE_VOID};
       if (src != INT_MAX) {
-        rv = sf->locals[src];
+        rv = vcopy(sf->locals[src]);
       }
       integer caller_idx = sf->caller;
       integer ret_dest = sf->ret_dest;
@@ -349,6 +355,7 @@ void vm_execute(Module *m) {
       }
       sp = caller_idx;
       sf = &call_stack[sp];
+      rv.owner_uid = sf->uid;
       if (ret_dest >= 0) {
         sf->locals[ret_dest] = rv;
       }
@@ -486,13 +493,14 @@ void vm_execute(Module *m) {
       goto L_EXIT;
     }
     {
-      Value rv = sf->locals[0];
+      Value rv = vcopy(sf->locals[0]);
       integer caller_idx = sf->caller;
       integer dest = sf->ret_dest;
       leave(sf);
       sp = caller_idx;
       sf = &call_stack[sp];
       if (dest >= 0) {
+        rv.owner_uid = sf->uid;
         sf->locals[dest] = rv;
       }
     }
@@ -582,10 +590,10 @@ Value default_value_of_type(Type *type, unsigned owner_uid) {
   }
 }
 
-void value_free(Value *value, unsigned owner_uid) {
+void vfree(Value *value, unsigned owner_uid) {
   if (value->tag == VALUE_STRUCT && value->owner_uid == owner_uid) {
     for (unsigned i = 0; i < value->$struct.length; ++i) {
-      value_free(&value->$struct.members[i], owner_uid);
+      vfree(&value->$struct.members[i], owner_uid);
     }
     free(value->$struct.members);
   }
@@ -599,7 +607,7 @@ void leave(Stack_Frame *frame) {
 
   for (integer i = 0; i < frame->n_locals; ++i) {
     Value *value = &frame->locals[i];
-    value_free(value, frame->uid);
+    vfree(value, frame->uid);
   }
 }
 
@@ -782,4 +790,20 @@ Value libffi_dynamic_dispatch(Extern_Function function, Value *argv, int argc) {
 
   fprintf(stderr, "[VM:FFI] no return type was specified\n");
   exit(1);
+}
+
+Value vcopy(Value value) {
+  Value copy = value;
+  switch (value.tag) {
+  case VALUE_VOID:
+  case VALUE_INTEGER:
+  case VALUE_POINTER: // these do not get deep copied.
+    break;
+  case VALUE_STRUCT: {
+    Value *new_members = malloc(sizeof(Value) * value.$struct.length);
+    memcpy(new_members, value.$struct.members, sizeof(Value) * value.$struct.length);
+    copy.$struct.members = new_members;
+  } break;
+  }
+  return copy;
 }

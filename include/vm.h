@@ -40,6 +40,9 @@ typedef struct Value {
   };
 } Value;
 
+void vfree(Value *value, unsigned owner_uid);
+Value vcopy(Value value);
+
 #define VM_STACK_LENGTH 1024
 
 typedef struct {

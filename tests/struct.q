@@ -17,7 +17,7 @@ main :: () void {
   vec_2 Vec2 = fn_returns_struct();
   assert(vec_2.x == 10 && vec_2.y == 10, "fn_return_struct() failed");
 
-  assert(false, "todo(fix double free bug, which occurs at the exit of this block. see main.q todo's)");
+  // assert(false, "todo(fix double free bug, which occurs at the exit of this block. see main.q todo's)");
 }
 
 // this always fails because we don't have shadow out parameters, nor do
