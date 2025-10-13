@@ -627,11 +627,12 @@ void lower_stmt(Thir *stmt, Function *fn, Module *m, IR_Context *c) {
   switch (stmt->tag) {
   case THIR_LABEL: {
     Label label = {
-        .owner = fn,
-        .name = stmt->label.name,
-        .offset = fn->code.length,
+      .owner = fn,
+      .name = stmt->label.name,
+      .offset = fn->code.length,
     };
     LIST_PUSH(c->labels, label);
+    break;
   }
   case THIR_CONTROL_FLOW_CHANGE:
     lower_control_flow_change(stmt, fn, c);
@@ -717,25 +718,22 @@ void lower_program(Thir *program, Module *m, IR_Context *c) {
   }
 
   LIST_FOREACH(c->gotos, $goto) {
-    bool found = false;
-    unsigned dest = 0;
+    Label *label = nullptr;
+
     for (unsigned i = 0; i < c->labels.length; ++i) {
-      Label label = c->labels.data[i];
-      if (strcmp($goto.target_label, label.name) && $goto.fn == label.owner) {
-        found = true;
-        dest = label.offset;
+      Label *search = &c->labels.data[i];
+      if (strcmp($goto.target_label, search->name) == 0 && $goto.fn == search->owner) {
+        label = &c->labels.data[i];
         break;
       }
     }
 
-    if (!found) {
+    if (!label) {
       fprintf(stderr, "[IR]: unresolved label '%s'\n", $goto.target_label);
       exit(EXIT_FAILURE);
     }
-
-    printf("goto jumping from %d -> %d\n", $goto.offset, dest - $goto.offset);
-
-    $goto.fn->code.data[$goto.offset].a = dest - $goto.offset;
+    signed dest = label->offset;
+    $goto.fn->code.data[$goto.offset].a = (dest - $goto.offset) - 1;
   }
 }
 

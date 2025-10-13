@@ -189,7 +189,8 @@ Ast *parse_block(Lexer *lexer, Context *c) {
       // need a semicolon
       if (one_ahead.type == TOKEN_COLON && lexer_lookahead(lexer, 2).type != TOKEN_COLON) {
         Ast *label = ast_alloc(c, AST_LABEL, one_ahead.span);
-        label->label.value = EXPECT(TOKEN_IDENTIFIER).value;
+        Token identifier = lexer_eat(lexer);
+        label->label_name = identifier.value;
         EXPECT(TOKEN_COLON); // use expect here just for clarity
         LIST_PUSH(statements, label);
         expect_semi = false;

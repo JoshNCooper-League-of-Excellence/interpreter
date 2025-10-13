@@ -227,9 +227,7 @@ typedef struct Ast {
     Ast_Ptr_list block;
     struct Ast *return_value;
 
-    struct {
-      const char *value;
-    } label;
+    const char *label_name;
 
     struct {
       const char *target_label;

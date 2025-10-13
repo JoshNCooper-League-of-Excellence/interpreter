@@ -309,8 +309,8 @@ Thir *type_block(Ast *ast, Context *c) {
       LIST_PUSH(stmts, type_control_flow_change(stmt, c));
       break;
     case AST_LABEL:
-      Thir *label = thir_alloc(c, THIR_LABEL, ast->span);
-      label->label.name = ast->label.value;
+      Thir *label = thir_alloc(c, THIR_LABEL, stmt->span);
+      label->label.name = stmt->label_name;
       LIST_PUSH(stmts, label);
       break;
     case AST_FOR:
@@ -492,12 +492,6 @@ Thir *type_return(Ast *ast, Context *c) {
               ret->return_value->type->name, c->typer_expected_type->name);
       exit(1);
     }
-  } else if (c->typer_expected_type) {
-    fprintf(stderr,
-            "invalid return type at: %s. this function must return a "
-            "value.expected: \"%s\"\n",
-            lexer_span_to_string(ast->span), c->typer_expected_type->name);
-    exit(1);
   }
   return ret;
 }

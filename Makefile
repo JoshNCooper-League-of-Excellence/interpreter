@@ -18,18 +18,7 @@ clean:
 	@rm -rf $(BIN_DIR)
 
 test:
-	@cd tests; \
-	time for file in ./*; do \
-		if [ -f "$$file" ]; then \
-			canon=$$(readlink -f "$$file"); \
-			../bin/compiler "$$canon"; \
-			if [ $$? -eq 0 ]; then \
-				echo -e "\033[1;32m$$canon passed\033[0m"; \
-			else \
-				echo -e "\033[1;31m$$canon failed\033[0m"; \
-			fi; \
-		fi; \
-	done
+	@./run_tests.sh
 
 
 run: all

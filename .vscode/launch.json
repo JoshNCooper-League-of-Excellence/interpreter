@@ -6,7 +6,7 @@
       "name": "Launch",
       "program": "${workspaceFolder}/bin/compiler",
       "args": [
-        "tests/empty-main.q"
+        "tests/goto.q"
       ],
       "cwd": "${workspaceFolder}"
     }

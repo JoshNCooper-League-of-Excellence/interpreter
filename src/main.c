@@ -19,7 +19,8 @@ char CURRENTLY_COMPILING_FILE_NAME[PATH_MAX];
 
 Extern_Function_list CACHED_EXTERNS;
 Cmd_Line_Args COMMAND_LINE_ARGUMENTS;
-bool LOG_IR = false;
+bool LOG_IR_TO_STDOUT = false;
+bool DO_RUN_WHEN_COMPILED = false;
 
 int main(int argc, char *argv[]) {
   if (argc == 1) {
@@ -27,7 +28,6 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-  realpath(argv[1], CURRENTLY_COMPILING_FILE_NAME);
   
   CACHED_EXTERNS = (Extern_Function_list){0};
   COMMAND_LINE_ARGUMENTS = (Cmd_Line_Args){.argc = argc - 1, .argv = argv + 1};
@@ -36,9 +36,13 @@ int main(int argc, char *argv[]) {
   for (int i = 1; i < argc; ++i) {
     const char *arg = argv[i];
     if (strncmp(arg, "-log-ir", 7) == 0) {
-      LOG_IR = true;
+      LOG_IR_TO_STDOUT = true;
     } else if (strncmp(arg, "-o=", 3) == 0) {
       output_path = arg + 3;
+    } else if (strncmp(arg, "-run", 3) == 0) {
+      DO_RUN_WHEN_COMPILED = true;
+    } else if (strstr(arg, ".q")) {
+      realpath(arg, CURRENTLY_COMPILING_FILE_NAME);
     }
   }
 
@@ -64,10 +68,10 @@ int main(int argc, char *argv[]) {
   IR_Context ir_context = {0};
   lower_program(typed_program, &module, &ir_context);
 
-  if (LOG_IR || output_path) {
+  if (LOG_IR_TO_STDOUT || output_path) {
     String_Builder sb = {0};
     print_module(&module, &sb);
-    if (LOG_IR) {
+    if (LOG_IR_TO_STDOUT) {
       printf("%s\n", sb.value);
     } else {
       FILE *file = fopen(output_path, "w");
@@ -81,7 +85,9 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  vm_execute(&module);
+  if (DO_RUN_WHEN_COMPILED) {
+    vm_execute(&module);
+  }
 
   return 0;
 }
