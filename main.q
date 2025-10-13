@@ -51,6 +51,7 @@ main :: () void {
   if s.length > 12 {
     puts(s.data);
   }
+
 }
 
 str :: (data byte*) string {

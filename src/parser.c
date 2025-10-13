@@ -54,6 +54,12 @@ Ast *parser_error(Context *c, Span span, const char *message) {
 Ast *parse_file(const char *filename, Context *c) {
   Lexer lexer;
   lexer_init(&lexer, filename);
+
+  if (lexer_next(&lexer) == TOKEN_EOF) {
+    printf("an empty file (\"%s\") was supplied, so there's no code to compile.\n", CURRENTLY_COMPILING_FILE_NAME);
+    exit(0);
+  }
+
   return parse_program(&lexer, c);
 }
 
@@ -131,9 +137,9 @@ Ast *parse_block(Lexer *lexer, Context *c) {
     if (peeked.type == TOKEN_RCURLY) {
       break;
     }
-
     bool expect_semi = true;
     switch (peeked.type) {
+    case TOKEN_GOTO:
     case TOKEN_CONTINUE:
     case TOKEN_BREAK:
       lexer_eat(lexer);
@@ -145,9 +151,9 @@ Ast *parse_block(Lexer *lexer, Context *c) {
       END_SPAN();
       Ast *ast = ast_alloc(c, AST_CONTROL_FLOW_CHANGE, span);
       if (has_label) {
-        ast->control_flow_change.label = label;
+        ast->control_flow_change.target_label = label;
       } else {
-        ast->control_flow_change.label = nullptr;
+        ast->control_flow_change.target_label = nullptr;
       }
 
       if (peeked.type == TOKEN_BREAK) {
@@ -178,7 +184,19 @@ Ast *parse_block(Lexer *lexer, Context *c) {
       lexer_eat(lexer);
       break;
     case TOKEN_IDENTIFIER:
-      LIST_PUSH(statements, OK(parse_identifier(lexer, c)));
+      Token one_ahead = lexer_lookahead(lexer, 1);
+      // Labels have to be parsed here because theyre the one identifier statement that doesn't 
+      // need a semicolon
+      if (one_ahead.type == TOKEN_COLON && lexer_lookahead(lexer, 2).type != TOKEN_COLON) {
+        Ast *label = ast_alloc(c, AST_LABEL, one_ahead.span);
+        label->label.value = EXPECT(TOKEN_IDENTIFIER).value;
+        EXPECT(TOKEN_COLON); // use expect here just for clarity
+        LIST_PUSH(statements, label);
+        expect_semi = false;
+      } else {
+        LIST_PUSH(statements, OK(parse_identifier(lexer, c)));
+      }
+
       break;
     case TOKEN_RETURN:
       lexer_eat(lexer);
@@ -409,15 +427,15 @@ Ast *parse_if(Lexer *lexer, Context *c) {
 Ast *parse_identifier(Lexer *lexer, Context *c) {
   // The peeked is ALWAYS an identifier here, so the other lookaheads are beyond
   // that.
-  Token two_ahead = lexer_lookahead(lexer, 1);
+  Token one_ahead = lexer_lookahead(lexer, 1);
 
   // x int = ... variable declaration
-  if (two_ahead.type == TOKEN_IDENTIFIER) {
+  if (one_ahead.type == TOKEN_IDENTIFIER) {
     return parse_variable(lexer, c);
   }
 
   // main :: ... functiond declaration
-  if (two_ahead.type == TOKEN_COLON) {
+  if (one_ahead.type == TOKEN_COLON) {
     return parse_function(lexer, c);
   }
 

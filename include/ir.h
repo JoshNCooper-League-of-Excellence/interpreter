@@ -105,7 +105,28 @@ typedef struct {
 } Module;
 
 typedef struct {
+  const char *name;
+  unsigned offset; // instruction pointer offset in function
+  Function *owner;
+} Label;
+
+typedef struct {
+  const char *target_label;
+  unsigned offset;
+  Function *fn;
+} Goto;
+
+typedef struct {
   unsigned *break_patches, *cont_patches, *break_patches_length, *cont_patches_length;
+  struct {
+    Label *data;
+    unsigned length, capacity;
+  } labels;
+  struct {
+    Goto *data;
+    unsigned length, capacity;
+  } gotos;
+
 } IR_Context;
 
 void module_init(Module *m, Context *context);

@@ -184,7 +184,7 @@ typedef enum {
 
   // TODO:
   // AST_GOTO,
-  // AST_LABEL,
+  AST_LABEL,
 
   AST_VARIABLE,
   AST_CALL,
@@ -228,7 +228,11 @@ typedef struct Ast {
     struct Ast *return_value;
 
     struct {
-      const char *label;
+      const char *value;
+    } label;
+
+    struct {
+      const char *target_label;
       Control_Flow_Tag tag;
     } control_flow_change;
 

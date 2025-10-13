@@ -23,6 +23,7 @@ typedef enum {
   THIR_IF,
   THIR_LOOP,
   THIR_CONTROL_FLOW_CHANGE,
+  THIR_LABEL,
 } Thir_Tag;
 
 #include "ffi.h"
@@ -54,10 +55,16 @@ typedef struct Thir {
     Thir_Ptr_list program;
     Thir_Ptr_list block;
 
+    // we don't really need to store anything here?
+    // we'll end up tracking it and 'linking' during/after IR gen.
+    struct {
+      const char *name;
+    } label;
+
     struct {
       Control_Flow_Tag tag;
-      // TODO: add a THIR node for labels, and store a ref to the label here (or a binding to it)
-      // so goto/continue/break can jump to labels.
+      // uniquely this is not resolved by the typer but actually the IR gen.
+      const char *target_label; 
     } control_flow_change;
 
     // Both while and for use this.

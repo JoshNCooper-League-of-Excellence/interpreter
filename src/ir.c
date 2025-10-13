@@ -1,7 +1,6 @@
 #include "ir.h"
 #include "ast.h"
 #include "binding.h"
-#include "core.h"
 #include "lexer.h"
 #include "list.h"
 #include "string_builder.h"
@@ -39,7 +38,7 @@
  * - CALL: a=dest, b=functionIndex, c=nargs.
  *         Callee receives args in locals[0..nargs-1]; return goes to dest.
  * - CALL_EXTERN: a=dest, b=externIndex, c=nargs; same calling convention.
- * - RET: a=srcTemp or -1 for void.
+ * - RET: a=srcTemp or INT_MAX for void.
  *
  * Arithmetic and logic (all unsignedeger semantics)
  * - ADD/SUB/MUL/DIV/MODULO/SHIFT_LEFT/SHIFT_RIGHT/BIT_AND/BIT_OR/XOR.
@@ -547,7 +546,14 @@ void lower_control_flow_change(Thir *stmt, Function *fn, IR_Context *c) {
     EMIT_JUMP(fn->code, 0);
     break;
   case CF_GOTO:
-    TODO("goto not yet implemented")
+    Goto $goto = {
+        .fn = fn,
+        .offset = fn->code.length,
+        .target_label = stmt->control_flow_change.target_label,
+    };
+    // resolved later, after we've collected all the labels.
+    LIST_PUSH(c->gotos, $goto);
+    EMIT_JUMP(fn->code, 0);
     break;
   }
 }
@@ -576,7 +582,7 @@ void lower_loop(Thir *stmt, Function *fn, Module *m, IR_Context *c) {
 
   // TODO: this shouldn't be fixed. should use a unsigned_list struct { unsigned *data,
   // length, capacity; } list; with list library
-  
+
   unsigned break_patch_list[256];
   unsigned cont_patch_list[256];
   unsigned break_count = 0, cont_count = 0;
@@ -619,6 +625,14 @@ void lower_loop(Thir *stmt, Function *fn, Module *m, IR_Context *c) {
 
 void lower_stmt(Thir *stmt, Function *fn, Module *m, IR_Context *c) {
   switch (stmt->tag) {
+  case THIR_LABEL: {
+    Label label = {
+        .owner = fn,
+        .name = stmt->label.name,
+        .offset = fn->code.length,
+    };
+    LIST_PUSH(c->labels, label);
+  }
   case THIR_CONTROL_FLOW_CHANGE:
     lower_control_flow_change(stmt, fn, c);
     break;
@@ -633,7 +647,7 @@ void lower_stmt(Thir *stmt, Function *fn, Module *m, IR_Context *c) {
       unsigned tmp = lower_expression(stmt->return_value, fn, m);
       EMIT_RET(fn->code, tmp);
     } else {
-      EMIT_RET(fn->code, -1);
+      EMIT_RET(fn->code, INT_MAX);
     }
   } break;
   case THIR_VARIABLE: {
@@ -681,7 +695,7 @@ void lower_function(Thir *fnode, Module *m, IR_Context *c) {
 
   // ensure we always return
   if (fn->code.length == 0 || fn->code.data[fn->code.length - 1].op != OP_RET) {
-    EMIT_RET(fn->code, 0);
+    EMIT_RET(fn->code, INT_MAX);
   }
 
   push_function(m, fn);
@@ -700,6 +714,28 @@ void lower_program(Thir *program, Module *m, IR_Context *c) {
       assert(f->tag == THIR_FUNCTION && "unexpected node type while lowering. expected THIR_FUNCTION");
       lower_function(f, m, c);
     }
+  }
+
+  LIST_FOREACH(c->gotos, $goto) {
+    bool found = false;
+    unsigned dest = 0;
+    for (unsigned i = 0; i < c->labels.length; ++i) {
+      Label label = c->labels.data[i];
+      if (strcmp($goto.target_label, label.name) && $goto.fn == label.owner) {
+        found = true;
+        dest = label.offset;
+        break;
+      }
+    }
+
+    if (!found) {
+      fprintf(stderr, "[IR]: unresolved label '%s'\n", $goto.target_label);
+      exit(EXIT_FAILURE);
+    }
+
+    printf("goto jumping from %d -> %d\n", $goto.offset, dest - $goto.offset);
+
+    $goto.fn->code.data[$goto.offset].a = dest - $goto.offset;
   }
 }
 

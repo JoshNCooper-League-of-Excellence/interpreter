@@ -1,17 +1,22 @@
 #include "vm.h"
+#include "ir.h"
 #include "list.h"
 #include "string_builder.h"
-#include "ir.h"
 #include "type.h"
 #include <dlfcn.h>
 #include <ffi.h>
+#include <stdlib.h>
 
 // this is the integer type the entire VM runs on (data-wise)
 typedef signed long long integer;
 
 #define VM_ERRF(msg, ...)                                                                                                   \
-  fprintf(stderr, "[VM]: " msg "\n" __VA_OPT__(, ) __VA_ARGS__);                                                            \
+  fprintf(stderr, "[VM:ERROR]: " msg "\n" __VA_OPT__(, ) __VA_ARGS__);                                                            \
   exit(1);
+
+#define VM_EXITF(msg, ...)                                                                                                  \
+  fprintf(stderr, "[VM:EXIT]: " msg "\n" __VA_OPT__(, ) __VA_ARGS__);                                                          \
+  exit(EXIT_SUCCESS);
 
 static inline Stack_Frame enter(Function *fn, integer ret_dest, integer caller) {
   Stack_Frame frame;
@@ -333,7 +338,7 @@ void vm_execute(Module *m) {
     case OP_RET: {
       signed src = instr.a;
       Value rv = {.tag = VALUE_VOID};
-      if (src >= 0) {
+      if (src != INT_MAX) {
         rv = sf->locals[src];
       }
       integer caller_idx = sf->caller;

@@ -291,6 +291,7 @@ Thir *type_for(Ast *ast, Context *c) {
 Thir *type_control_flow_change(Ast *ast, Context *c) {
   Thir *thir = thir_alloc(c, THIR_CONTROL_FLOW_CHANGE, ast->span);
   thir->control_flow_change.tag = ast->control_flow_change.tag;
+  thir->control_flow_change.target_label = ast->control_flow_change.target_label;
   return thir;
 }
 
@@ -306,6 +307,11 @@ Thir *type_block(Ast *ast, Context *c) {
       report_error(stmt);
     case AST_CONTROL_FLOW_CHANGE:
       LIST_PUSH(stmts, type_control_flow_change(stmt, c));
+      break;
+    case AST_LABEL:
+      Thir *label = thir_alloc(c, THIR_LABEL, ast->span);
+      label->label.name = ast->label.value;
+      LIST_PUSH(stmts, label);
       break;
     case AST_FOR:
       LIST_PUSH(stmts, type_for(stmt, c));
