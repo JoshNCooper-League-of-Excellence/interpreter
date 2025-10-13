@@ -1,4 +1,5 @@
 extern assert :: (int, byte*) void;
+extern assert_eqi :: (int, int, byte*) void;
 extern printf :: (byte*,int) void;
 
 main :: () void {
@@ -25,6 +26,23 @@ main :: () void {
       v += j;
     }
   }
-
   assert(v == 120, "v != 120 (nested loop)");
+
+  v = 0;
+  for i int = 0; i < 10; i += 1 {
+    if i == 5 {
+      break;
+    }
+    v += 1;
+  }
+  assert_eqi(v, 5, "v != 5 (break in loop)");
+
+  v = 0;
+  for i int = 0; i < 10; i += 1 {
+    if i % 2 == 0 {
+      continue;
+    }
+    v += i;
+  }
+  assert(v == 25, "v != 25 (continue in loop)");
 }

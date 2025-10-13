@@ -273,15 +273,18 @@ Thir *type_while(Ast *ast, Context *c) {
 }
 
 Thir *type_for(Ast *ast, Context *c) {
+  Scope *old = scope_enter_new_child_and_return_previous(c);
   Thir *init = type_variable(ast->$for.init, c);
   Thir *condition = type_expression(ast->$for.condition, c);
   Thir *update = type_expression(ast->$for.update, c);
   Thir *block = type_block(ast->$for.block, c);
   Thir *loop = thir_alloc(c, THIR_LOOP, ast->span);
+  c->current_scope = old;
   loop->loop.init = init;
   loop->loop.update = update;
   loop->loop.condition = condition;
   loop->loop.block = block;
+
   return loop;
 }
 
